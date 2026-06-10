@@ -11,6 +11,9 @@ pytest-cache-files-*/
 # 配置文件（用户自行管理，含敏感 API key）
 config.py
 
+# 环境变量文件（真实 key）
+.env
+
 # LLM response cache（含原始评论/新闻，是隐私数据）
 outputs/llm_cache/
 

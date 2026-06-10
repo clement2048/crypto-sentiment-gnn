@@ -1,23 +1,40 @@
 """config.py 的公开模板。
 
-真实 config.py 包含 API key，已被 .gitignore，不会推到远端。
+真实 config.py 已被 .gitignore，不会推到远端。
 clone 后请执行：
 
     cp config.example.py config.py
+    cp .env.example .env   # 然后填入真实 API key
 
-然后填入你的真实 API key，或者更安全地只用环境变量：
-
-    PowerShell:  $env:DEEPSEEK_API_KEY="sk-..."
-    PowerShell:  $env:DASHSCOPE_API_KEY="sk-..."
-
-本文件只包含常量超参数，无任何敏感信息，可安全上传到公开仓库。
+本文件只包含常量超参数和 .env 加载逻辑，无任何敏感信息，可安全上传。
 """
 
 from __future__ import annotations
+import os
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+
+
+# -----------------------------
+# .env 自动加载
+# -----------------------------
+# 项目根目录下的 .env 会作为环境变量源，优先级低于 shell 里已经 export 的同名变量。
+# 这样既支持 .env 文件，也兼容老的 PowerShell `$env:DEEPSEEK_API_KEY=...` 临时覆盖。
+def _load_env_file() -> None:
+    env_path = PROJECT_ROOT / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+_load_env_file()
 
 
 # -----------------------------
@@ -91,8 +108,8 @@ MOCK_PROFILE_RELEVANCE = 0.5
 
 DEEPSEEK_ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic"
 DEEPSEEK_MODEL = "deepseek-v4-pro"
-# 填入你的 DeepSeek key，或更安全地用环境变量 $env:DEEPSEEK_API_KEY
-DEEPSEEK_API_KEY_ENV = ""
+# 真实 key 应放在 .env 里（或用 $env:DEEPSEEK_API_KEY）。config.py 本体不再硬编码。
+DEEPSEEK_API_KEY_ENV = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_FALLBACK_API_KEY_ENV = "ANTHROPIC_API_KEY"
 DEEPSEEK_MAX_TOKENS = 1200
 DEEPSEEK_TEMPERATURE = 0.2
@@ -110,8 +127,8 @@ DEEPSEEK_CACHE_DIR = PROJECT_ROOT / "outputs" / "llm_cache" / "deepseek"
 
 BAILIAN_OPENAI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 BAILIAN_MODEL = "deepseek-v4-flash"
-# 填入你的百炼 key，或更安全地用环境变量 $env:DASHSCOPE_API_KEY
-BAILIAN_API_KEY_ENV = ""
+# 同上：真实 key 应放在 .env 里（或用 $env:BAILIAN_API_KEY）。
+BAILIAN_API_KEY_ENV = os.getenv("BAILIAN_API_KEY", "")
 BAILIAN_MAX_TOKENS = 1200
 BAILIAN_TEMPERATURE = 0.2
 BAILIAN_ENABLE_THINKING = False
