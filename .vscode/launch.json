@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug full pipeline fixture",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "console": "integratedTerminal",
+      "args": [
+        "full",
+        "--input", "tests\\fixtures\\sample_post.jsonl",
+        "--limit-blocks", "1",
+        "--rounds", "1",
+        "--train-epochs", "1"
+      ]
+    }
+  ]
+}

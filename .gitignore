@@ -1,0 +1,50 @@
+# Python 编译产物
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# pytest 缓存
+.pytest_cache/
+pytest-cache-files-*/
+
+# 配置文件（用户自行管理，含敏感 API key）
+config.py
+
+# LLM response cache（含原始评论/新闻，是隐私数据）
+outputs/llm_cache/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# IDE / 编辑器
+.idea/
+*.swp
+*.swo
+
+# OS 临时文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 训练产物 / checkpoint
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+runs/
+tb_logs/
+
+# 大数据格式
+*.parquet
+*.feather
+*.h5
+*.hdf5
+
+# 测试临时产物
+.cache/
+.coverage
+htmlcov/
+.tox/

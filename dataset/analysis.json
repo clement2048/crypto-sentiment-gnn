@@ -1,0 +1,125 @@
+{
+    "source_file": "dataset\\html\\update_news\\303431040007297.html",
+    "post_id": "303431040007297",
+    "post_url": "https://www.binance.com/zh-CN/square/post/03-20-2026-4-08-303431040007297",
+    "post_author": "Binance News",
+    "post_content": "据 ChainCatcher 报道，过去 24 小时全网爆仓金额达到 4.08 亿美元，其中多单爆仓 3.05 亿美元，空单爆仓 1.03 亿美元。比特币多单爆仓 1.11 亿美元，空单爆仓 3,533.23 万美元；以太坊多单爆仓 6,641.27 万美元，空单爆仓 3,175.94 万美元。\n\n此外，全球共有 117,471 人在最近 24 小时内被爆仓，最大单笔爆仓发生在 Hyperliquid - BTC-USD，价值 1081.92 万美元。",
+    "post_region": "zh-CN",
+    "post_time": "2026-03-20 09:44:03",
+    "post_time_ms": 1773971043000,
+    "products": [
+        "BTC",
+        "ETH"
+    ],
+    "first_product": "BTC",
+    "first_product_url": "https://www.binance.com/zh-CN/trade/BTC_USDT?contentId=303431040007297",
+    "market_type": "spot",
+    "post_type": "article",
+    "comment_num": 2,
+    "comment_total_num": 2,
+    "comments": [
+        {
+            "comment_id": "c1",
+            "original_comment_id": "303444537073905",
+            "author": "永不清算",
+            "text": "这个市场爆仓太过频繁，获利者很少",
+            "post_time": "2026-03-20 10:38:58",
+            "replies": [],
+            "t0": "2026-03-20 10:38:58",
+            "t_window": "24h",
+            "p0": 70729.92,
+            "p1": 70657.35,
+            "label": -1,
+            "comment_error": ""
+        },
+        {
+            "comment_id": "c2",
+            "original_comment_id": "303450226148178",
+            "author": " 铁匠   ",
+            "text": "不要脸的狗庄",
+            "post_time": "2026-03-20 11:02:07",
+            "replies": [],
+            "t0": "2026-03-20 11:02:07",
+            "t_window": "24h",
+            "p0": 70783.69,
+            "p1": 70642.13,
+            "label": -1,
+            "comment_error": ""
+        }
+    ],
+    "label_error": ""
+}
+{
+    "source_file": "dataset\\html\\update_news\\303497160210194.html",
+    "post_id": "303497160210194",
+    "post_url": "https://www.binance.com/zh-CN/square/post/03-20-2026-76-303497160210194",
+    "post_author": "Binance News",
+    "post_content": "据 NS3 报道，一个鲸鱼地址在约 12 小时前以平均价格 2,111 美元出售了 5,571 枚 ETH，价值约 1,176 万美元。此次交易导致约 76 万美元的亏损。据悉，该地址有高买低卖的历史。",
+    "post_region": "zh-CN",
+    "post_time": "2026-03-20 14:13:06",
+    "post_time_ms": 1773987186000,
+    "products": [
+        "ETH"
+    ],
+    "first_product": "ETH",
+    "first_product_url": "https://www.binance.com/zh-CN/trade/ETH_USDT?contentId=303497160210194",
+    "market_type": "spot",
+    "post_type": "article",
+    "comment_num": 1,
+    "comment_total_num": 1,
+    "comments": [
+        {
+            "comment_id": "c1",
+            "original_comment_id": "303524802187729",
+            "author": "鸿运發",
+            "text": "赶紧买",
+            "post_time": "2026-03-20 16:05:34",
+            "replies": [],
+            "t0": "2026-03-20 16:05:34",
+            "t_window": "24h",
+            "p0": 2141.21,
+            "p1": 2158.77,
+            "label": 1,
+            "comment_error": ""
+        }
+    ],
+    "label_error": ""
+}
+
+{
+    "source_file": "dataset\\html\\update_news\\303513913168817.html",
+    "post_id": "303513913168817",
+    "post_url": "https://www.binance.com/zh-CN/square/post/03-20-2026-bitcoin-10x-research-303513913168817",
+    "post_author": "Binance News",
+    "post_content": "10x Research 表示，市场正处于关键转折点，其模型看好山寨币。据 NS3 报道，随着 Bitcoin 主导地位下降，Bitcoin 面临宏观压力和 ETF 资金流出，而 Ethereum 则因机构积累和结构升级而受益。",
+    "post_region": "zh-CN",
+    "post_time": "2026-03-20 15:21:16",
+    "post_time_ms": 1773991276000,
+    "products": [
+        "BTC",
+        "ETH"
+    ],
+    "first_product": "BTC",
+    "first_product_url": "https://www.binance.com/zh-CN/trade/BTC_USDT?contentId=303513913168817",
+    "market_type": "spot",
+    "post_type": "article",
+    "comment_num": 1,
+    "comment_total_num": 1,
+    "comments": [
+        {
+            "comment_id": "c1",
+            "original_comment_id": "303522926415745",
+            "author": "顺其自然0508",
+            "text": "吹牛逼",
+            "post_time": "2026-03-20 15:57:56",
+            "replies": [],
+            "t0": "2026-03-20 15:57:56",
+            "t_window": "24h",
+            "p0": 71042.23,
+            "p1": 70594.43,
+            "label": -1,
+            "comment_error": ""
+        }
+    ],
+    "label_error": ""
+}

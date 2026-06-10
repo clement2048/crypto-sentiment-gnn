@@ -1,0 +1,2 @@
+torchdiffeq==0.2.5
+json-repair==0.60.1
