@@ -12,6 +12,7 @@ from typing import Any
 import torch
 
 from agent import DebateOrchestrator, DebateTranscript, create_debate_client
+from agent.llm_client import DebateClient
 from config import DEFAULT_DEBATE_ROUNDS, LEARNING_RATE, PRINT_SAMPLES
 from data import build_comment_blocks, load_posts
 from data.schema import CommentBlock
@@ -42,9 +43,11 @@ def run_split_experiment(
     rounds: int = DEFAULT_DEBATE_ROUNDS,
     epochs: int = 5,
     learning_rate: float = LEARNING_RATE,
-    debate_mode: str = "mock",
-    judge_mode: str = "mock",
+    debate_mode: str = "minimax",
+    judge_mode: str = "minimax",
     seed: int = 42,
+    debate_client: DebateClient | None = None,
+    judge_client: object | None = None,
 ) -> dict[str, Any]:
     """按时间顺序运行 train/val/test 小实验。"""
     if train_count <= 0 or val_count < 0 or test_count <= 0:
@@ -64,7 +67,7 @@ def run_split_experiment(
     test_blocks = selected[train_count + val_count :]
 
     profile_store = ProfileStore.from_blocks(sorted_blocks)
-    orchestrator = DebateOrchestrator(client=create_debate_client(debate_mode))
+    orchestrator = DebateOrchestrator(client=debate_client or create_debate_client(debate_mode))
     contexts = [
         _build_context(block, profile_store, orchestrator, rounds)
         for block in selected
@@ -76,7 +79,7 @@ def run_split_experiment(
     model = GraphSentimentModel(input_dim=NODE_FEATURE_DIM)
     train_losses = _train_model(model, [item.graph_tensor for item in train_contexts], epochs, learning_rate)
 
-    judge = create_judge_client(judge_mode)
+    judge = judge_client or create_judge_client(judge_mode)
     train_records = _records_for_contexts(model, judge, train_contexts)
     val_records = _records_for_contexts(model, judge, val_contexts)
     test_records = _records_for_contexts(model, judge, test_contexts)
@@ -133,8 +136,8 @@ def main() -> None:
     parser.add_argument("--rounds", type=int, default=1)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    parser.add_argument("--debate-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
-    parser.add_argument("--judge-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
+    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-json", type=str, default=None)
     args = parser.parse_args()

@@ -15,6 +15,7 @@ from profiles import ProfileStore
 from scripts.run_split_experiment import run_split_experiment
 from scripts.train_prototype import train_prototype
 from scripts.run_full_pipeline import run_full_pipeline
+from tests.fakes import FakeDebateClient, FakeJudgeClient
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_post.jsonl"
@@ -55,7 +56,13 @@ class StageFourModelTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(loss))
 
     def test_train_prototype_smoke(self):
-        metrics = train_prototype(str(FIXTURE), limit_blocks=1, rounds=1, epochs=2)
+        metrics = train_prototype(
+            str(FIXTURE),
+            limit_blocks=1,
+            rounds=1,
+            epochs=2,
+            client=FakeDebateClient(),
+        )
 
         self.assertEqual(metrics["graphs"], 1.0)
         self.assertGreaterEqual(metrics["final_loss"], 0.0)
@@ -63,7 +70,14 @@ class StageFourModelTest(unittest.TestCase):
         self.assertLessEqual(metrics["mean_probability"], 1.0)
 
     def test_full_pipeline_judge_receives_model_summary(self):
-        records = run_full_pipeline(str(FIXTURE), limit_blocks=1, rounds=1, train_epochs=1)
+        records = run_full_pipeline(
+            str(FIXTURE),
+            limit_blocks=1,
+            rounds=1,
+            train_epochs=1,
+            debate_client=FakeDebateClient(),
+            judge_client=FakeJudgeClient(),
+        )
 
         self.assertEqual(len(records), 1)
         self.assertIn("model_summary", records[0])
@@ -83,8 +97,9 @@ class StageFourModelTest(unittest.TestCase):
             test_count=1,
             rounds=1,
             epochs=1,
-            debate_mode="mock",
             seed=123,
+            debate_client=FakeDebateClient(),
+            judge_client=FakeJudgeClient(),
         )
 
         self.assertEqual(result["config"]["train_count"], 2)
@@ -99,7 +114,7 @@ def _fixture_graph_tensor():
     assert not issues
     block = blocks[0]
     profiles = ProfileStore.from_blocks(blocks).get_profiles_for_block(block)
-    transcript = DebateOrchestrator().run(block, profiles, rounds=1)
+    transcript = DebateOrchestrator(client=FakeDebateClient()).run(block, profiles, rounds=1)
     graph = build_hetero_graph(block, transcript)
     return graph_to_tensor(graph, label=block.label)
 

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from agent.llm_client import DebateClient
 from config import DEFAULT_DEBATE_ROUNDS, FULL_PIPELINE_TRAIN_EPOCHS, LEARNING_RATE, PRINT_SAMPLES
 from scripts.run_debate import DEFAULT_INPUT
 from scripts.run_full_pipeline import run_full_pipeline
@@ -76,8 +77,10 @@ def evaluate_pipeline(
     rounds: int = DEFAULT_DEBATE_ROUNDS,
     train_epochs: int = FULL_PIPELINE_TRAIN_EPOCHS,
     learning_rate: float = LEARNING_RATE,
-    debate_mode: str = "mock",
-    judge_mode: str = "mock",
+    debate_mode: str = "minimax",
+    judge_mode: str = "minimax",
+    debate_client: DebateClient | None = None,
+    judge_client: object | None = None,
 ) -> tuple[list[dict[str, object]], EvaluationMetrics]:
     """运行完整 pipeline，并计算最终法官 verdict 相对真实 label 的指标。"""
     records = run_full_pipeline(
@@ -88,6 +91,8 @@ def evaluate_pipeline(
         learning_rate=learning_rate,
         debate_mode=debate_mode,
         judge_mode=judge_mode,
+        debate_client=debate_client,
+        judge_client=judge_client,
     )
     metrics = compute_metrics(records)
     return records, metrics
@@ -139,8 +144,8 @@ def main() -> None:
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     parser.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    parser.add_argument("--debate-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
-    parser.add_argument("--judge-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
+    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     parser.add_argument("--output-jsonl", type=str, default=None)
     parser.add_argument("--metrics-json", type=str, default=None)
     args = parser.parse_args()

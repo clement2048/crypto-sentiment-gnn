@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from agent import DebateOrchestrator, create_debate_client
+from agent.llm_client import DebateClient
 from config import DEFAULT_DEBATE_ROUNDS, DEFAULT_INPUT_PATH, DEFAULT_LIMIT_BLOCKS, PRINT_SAMPLES
 from data import build_comment_blocks, load_posts
 from profiles import ProfileStore
@@ -21,7 +22,8 @@ def run_debate_pipeline(
     limit_posts: int | None = None,
     limit_blocks: int | None = None,
     rounds: int = DEFAULT_DEBATE_ROUNDS,
-    mode: str = "mock",
+    mode: str = "minimax",
+    client: DebateClient | None = None,
 ) -> list[dict[str, object]]:
     posts = load_posts(input_path)
     if limit_posts is not None:
@@ -31,7 +33,7 @@ def run_debate_pipeline(
         blocks = blocks[:limit_blocks]
 
     profile_store = ProfileStore.from_blocks(blocks)
-    orchestrator = DebateOrchestrator(client=create_debate_client(mode))
+    orchestrator = DebateOrchestrator(client=client or create_debate_client(mode))
 
     records: list[dict[str, object]] = []
     for block in blocks:
@@ -51,12 +53,12 @@ def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-    parser = argparse.ArgumentParser(description="Run offline mock debate pipeline.")
+    parser = argparse.ArgumentParser(description="Run online debate pipeline.")
     parser.add_argument("--input", default=DEFAULT_INPUT, help="JSONL file, directory, or glob pattern.")
     parser.add_argument("--limit-posts", type=int, default=None)
     parser.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    parser.add_argument("--mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
+    parser.add_argument("--mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     parser.add_argument("--output-jsonl", type=str, default=None)
     args = parser.parse_args()
 
@@ -89,7 +91,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 
 
 

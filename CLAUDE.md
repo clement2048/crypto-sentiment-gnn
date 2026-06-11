@@ -52,17 +52,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 python main.py blocks                                  # 加载 JSONL，打印 CommentBlock 统计 + 时间切分
-python main.py debate --limit-blocks 3 --rounds 1      # 仅生成辩论（默认 mock）
+python main.py debate --limit-blocks 3 --rounds 1 --mode minimax
 python main.py debate --limit-blocks 1 --mode deepseek # DeepSeek 真实 LLM 辩论
 python main.py debate --limit-blocks 1 --mode bailian  # 阿里云百炼 OpenAI 兼容
 python main.py debate --limit-blocks 1 --mode minimax  # MiniMax Anthropic 兼容
+python main.py debate --limit-blocks 1 --mode siliconflow # 硅基流动 OpenAI 兼容
 python main.py graphs --limit-blocks 3 --rounds 1      # 融合评论图+辩论图
 python main.py train-prototype --epochs 3              # 最小可训练 smoke
 python main.py full --limit-blocks 1 --rounds 1        # 完整链路：辩论→图→模型摘要→法官
 python main.py full --limit-blocks 1 --debate-mode deepseek --judge-mode deepseek
 python main.py full --limit-blocks 1 --debate-mode minimax --judge-mode minimax
 python main.py evaluate --rounds 1 --metrics-json outputs/eval_metrics.json
-python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --epochs 5 --seed 42 --output-json outputs/split_9_3_3_mock.json
+python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --epochs 5 --debate-mode minimax --judge-mode minimax --seed 42 --output-json outputs/split_9_3_3_minimax.json
 python main.py case-study --post-id 305698686327490 --debate-mode deepseek --output-md outputs/case.md
 python -m scripts.export_case_csv --input-json outputs/case.json --output-dir outputs/case_csv
 python -m scripts.export_metrics_csv --input-json outputs/split.json --output-csv outputs/metrics.csv
@@ -110,11 +111,10 @@ JudgeOutput (verdict ∈ {BULLISH, BEARISH, NEUTRAL} + confidence + report + sco
 | `profiles/user_profile.py` | `UserProfile` 计算逻辑；冷启动画像字段在 `config.py` |
 | `agent/prompts.py` | 论文 v4 角色名、阶段名、提示词；新角色先改这里再改 client |
 | `agent/debate_orchestrator.py` | 只控制"谁在第几轮第几个阶段发言"，不写 LLM 调用细节 |
-| `agent/client_factory.py` | `mock` / `deepseek` / `bailian` / `minimax` 模式切换 |
-| `agent/mock_client.py` | 离线 mock 辩论生成器（规则生成，不依赖网络） |
+| `agent/client_factory.py` | `deepseek` / `bailian` / `minimax` / `siliconflow` 模式切换 |
 | `agent/anthropic_compatible.py` | Anthropic Messages 兼容协议共享层（DeepSeek + MiniMax），含 DebateClient 与 JudgeClient 基类 + 两个 provider 薄包装 |
-| `agent/openai_compatible.py` | OpenAI Chat Completions 兼容协议共享层（Bailian），含 DebateClient 与 JudgeClient 基类 + Bailian 薄包装 |
-| `judge/client_factory.py` | `mock` / `deepseek` / `bailian` / `minimax` 法官 provider 切换 |
+| `agent/openai_compatible.py` | OpenAI Chat Completions 兼容协议共享层（Bailian + SiliconFlow），含 DebateClient 与 JudgeClient 基类 + provider 薄包装 |
+| `judge/client_factory.py` | `deepseek` / `bailian` / `minimax` / `siliconflow` 法官 provider 切换 |
 | `debate_graph/comment_graph.py` | 评论树→reply 边 |
 | `debate_graph/debate_graph.py` | Argument→cite/support/attack/respond/propose 边 |
 | `debate_graph/hetero_graph.py` | 融合两图 + 节点去重 + 端点缺失边丢弃 |
@@ -123,7 +123,6 @@ JudgeOutput (verdict ∈ {BULLISH, BEARISH, NEUTRAL} + confidence + report + sco
 | `model/bdg_ode/` | 当前默认模型：DualEncoder → ODE 演化 → DualReadout → Calibrator |
 | `model/bdg_ode/ode_solver.py` | `torchdiffeq.odeint` + 手写 Euler fallback |
 | `model/model_summary.py` | `ModelOutputSummary` 是给法官的接口契约 |
-| `judge/model_aware_judge.py` | 离线 mock 法官；`p_bull = JUDGE_MODEL_WEIGHT*model + JUDGE_DEBATE_WEIGHT*debate + JUDGE_MARGIN_WEIGHT*margin` |
 | `judge/consistency.py` | 检查 verdict/confidence/score vector 内部一致性 |
 
 **待办（README 已列，勿重复造轮子）**：
@@ -145,6 +144,7 @@ $env:ANTHROPIC_API_KEY="sk-..."         # 兼容别名；MiniMax 也读这个
 $env:MINIMAX_API_KEY="sk-..."           # MiniMax 备用别名
 $env:DASHSCOPE_API_KEY="sk-..."         # 阿里云百炼（OpenAI 兼容）
 $env:BAILIAN_API_KEY="sk-..."           # 阿里云百炼备用别名
+$env:SILICONFLOW_API_KEY="sk-..."       # 硅基流动（OpenAI 兼容）
 ```
 
 `_load_env_file()` 在 `config.py:20-32` 会把 `.env` 注入到 `os.environ`（`setdefault`，shell 已 export 的同名变量优先）。
@@ -153,6 +153,7 @@ $env:BAILIAN_API_KEY="sk-..."           # 阿里云百炼备用别名
 - DeepSeek Anthropic 兼容：`https://api.deepseek.com/anthropic`，模型 `deepseek-v4-pro`
 - 阿里云百炼 OpenAI 兼容：`https://dashscope.aliyuncs.com/compatible-mode/v1`，模型以 `config.py` 的 `BAILIAN_MODEL` 为准（当前为 `qwen-flash`）
 - MiniMax Anthropic 兼容：`https://api.minimax.io/anthropic`，模型 `MiniMax-M3`
+- 硅基流动 OpenAI 兼容：`https://api.siliconflow.cn/v1`，模型以 `SILICONFLOW_MODEL` 为准（默认 `Pro/zai-org/GLM-4.7`，可在 `.env` 覆盖）
 
 ## 测试
 
@@ -175,7 +176,7 @@ python -m pytest tests -p no:cacheprovider
 
 ## 配置常量组织
 
-`config.py` 是单一来源，**不要在调用方硬编码超参数**。分块组织：数据/时间切分、用户画像、Mock 辩论、DeepSeek/百炼、图特征（`NODE_FEATURE_DIM=8`）、ODE（`ODE_STEPS=4`, `ODE_SOLVER_BACKEND=torchdiffeq`）、训练默认值、Mock 法官（`JUDGE_MODEL_WEIGHT=0.60` 等）、概率边界。论文里 `L_mse / L_judge_cons` 的常数应该加在 judge 那一段。
+`config.py` 是单一来源，**不要在调用方硬编码超参数**。分块组织：数据/时间切分、用户画像、辩论流程、DeepSeek/百炼/MiniMax/硅基流动、图特征（`NODE_FEATURE_DIM=8`）、ODE（`ODE_STEPS=4`, `ODE_SOLVER_BACKEND=torchdiffeq`）、训练默认值、概率边界。论文里 `L_mse / L_judge_cons` 的常数应该加在 judge 那一段。
 
 ## 输出约定
 

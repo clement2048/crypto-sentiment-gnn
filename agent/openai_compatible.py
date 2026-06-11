@@ -47,6 +47,16 @@ from config import (
     BAILIAN_TEMPERATURE,
     BAILIAN_TIMEOUT_SECONDS,
     PROJECT_ROOT,
+    SILICONFLOW_API_KEY_ENV,
+    SILICONFLOW_CACHE_DIR,
+    SILICONFLOW_CACHE_ENABLED,
+    SILICONFLOW_ENABLE_THINKING,
+    SILICONFLOW_HTTP_RETRIES,
+    SILICONFLOW_MAX_TOKENS,
+    SILICONFLOW_MODEL,
+    SILICONFLOW_OPENAI_BASE_URL,
+    SILICONFLOW_TEMPERATURE,
+    SILICONFLOW_TIMEOUT_SECONDS,
 )
 from data.schema import CommentBlock
 from profiles.user_profile import UserProfile
@@ -57,6 +67,7 @@ from profiles.user_profile import UserProfile
 
 Transport = Callable[[dict[str, Any]], dict[str, Any]]
 DEFAULT_BAILIAN_API_KEY_ENV_NAME = "DASHSCOPE_API_KEY"
+DEFAULT_SILICONFLOW_API_KEY_ENV_NAME = "SILICONFLOW_API_KEY"
 
 
 # =============================================================================
@@ -401,6 +412,51 @@ class BailianJudgeClient(OpenAICompatibleJudgeClient):
     ):
         super().__init__(
             http_client=BailianOpenAICompatibleDebateClient(transport=transport, **overrides)
+        )
+
+
+# =============================================================================
+# Provider 薄配置:SiliconFlow(硅基流动)
+# =============================================================================
+
+
+class SiliconFlowOpenAICompatibleDebateClient(OpenAICompatibleDebateClient):
+    """硅基流动 OpenAI 兼容接口辩论 client(薄配置)。"""
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        transport: Transport | None = None,
+        **overrides: Any,
+    ):
+        super().__init__(
+            api_key=api_key,
+            base_url=SILICONFLOW_OPENAI_BASE_URL,
+            model=SILICONFLOW_MODEL,
+            max_tokens=SILICONFLOW_MAX_TOKENS,
+            temperature=SILICONFLOW_TEMPERATURE,
+            enable_thinking=SILICONFLOW_ENABLE_THINKING,
+            timeout_seconds=SILICONFLOW_TIMEOUT_SECONDS,
+            http_retries=SILICONFLOW_HTTP_RETRIES,
+            cache_enabled=SILICONFLOW_CACHE_ENABLED,
+            cache_dir=SILICONFLOW_CACHE_DIR,
+            api_key_env=SILICONFLOW_API_KEY_ENV,
+            fallback_api_key_env=DEFAULT_SILICONFLOW_API_KEY_ENV_NAME,
+            transport=transport,
+            **overrides,
+        )
+
+
+class SiliconFlowJudgeClient(OpenAICompatibleJudgeClient):
+    """硅基流动 OpenAI 兼容接口法官 client(薄配置)。"""
+
+    def __init__(
+        self,
+        transport: Transport | None = None,
+        **overrides: Any,
+    ):
+        super().__init__(
+            http_client=SiliconFlowOpenAICompatibleDebateClient(transport=transport, **overrides)
         )
 
 

@@ -46,11 +46,11 @@ def main() -> None:
     blocks.set_defaults(func=_cmd_blocks)
 
     # debate：只生成辩论，不调用模型和法官。用于检查 Agent 输出结构。
-    debate = subparsers.add_parser("debate", help="Run offline mock multi-agent debate.")
+    debate = subparsers.add_parser("debate", help="Run online multi-agent debate.")
     _add_input_arg(debate)
     debate.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
     debate.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    debate.add_argument("--mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
+    debate.add_argument("--mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     debate.add_argument("--output-jsonl", type=str, default=None)
     debate.set_defaults(func=_cmd_debate)
 
@@ -59,6 +59,7 @@ def main() -> None:
     _add_input_arg(graphs)
     graphs.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
     graphs.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
+    graphs.add_argument("--mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     graphs.add_argument("--output-jsonl", type=str, default=None)
     graphs.set_defaults(func=_cmd_graphs)
 
@@ -78,8 +79,8 @@ def main() -> None:
     full.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     full.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
     full.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    full.add_argument("--debate-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
-    full.add_argument("--judge-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
+    full.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    full.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     full.add_argument("--output-jsonl", type=str, default=None)
     full.set_defaults(func=_cmd_full)
 
@@ -90,8 +91,8 @@ def main() -> None:
     evaluate.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     evaluate.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
     evaluate.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    evaluate.add_argument("--debate-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
-    evaluate.add_argument("--judge-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
+    evaluate.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    evaluate.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     evaluate.add_argument("--output-jsonl", type=str, default=None)
     evaluate.add_argument("--metrics-json", type=str, default=None)
     evaluate.set_defaults(func=_cmd_evaluate)
@@ -105,8 +106,8 @@ def main() -> None:
     experiment.add_argument("--rounds", type=int, default=1)
     experiment.add_argument("--epochs", type=int, default=5)
     experiment.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    experiment.add_argument("--debate-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
-    experiment.add_argument("--judge-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
+    experiment.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    experiment.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     experiment.add_argument("--seed", type=int, default=42)
     experiment.add_argument("--output-json", type=str, default=None)
     experiment.set_defaults(func=_cmd_split_experiment)
@@ -118,8 +119,8 @@ def main() -> None:
     case_study.add_argument("--block-id", default=None)
     case_study.add_argument("--max-blocks", type=int, default=None)
     case_study.add_argument("--rounds", type=int, default=1)
-    case_study.add_argument("--debate-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="deepseek")
-    case_study.add_argument("--judge-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
+    case_study.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="deepseek")
+    case_study.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     case_study.add_argument("--seed", type=int, default=42)
     case_study.add_argument("--output-json", default=None)
     case_study.add_argument("--output-md", default=None)
@@ -164,7 +165,7 @@ def _cmd_blocks(args: argparse.Namespace) -> None:
 
 
 def _cmd_debate(args: argparse.Namespace) -> None:
-    """只运行 mock 辩论；这里不会调用法官。"""
+    """只运行辩论；这里不会调用法官。"""
     records = run_debate_pipeline(args.input, limit_blocks=args.limit_blocks, rounds=args.rounds, mode=args.mode)
     print(f"Debate records: {len(records)}")
     for record in records[: min(len(records), PRINT_SAMPLES)]:
@@ -178,8 +179,8 @@ def _cmd_debate(args: argparse.Namespace) -> None:
 
 
 def _cmd_graphs(args: argparse.Namespace) -> None:
-    """从 mock 辩论结果构建异构图。"""
-    records = build_graph_records(args.input, limit_blocks=args.limit_blocks, rounds=args.rounds)
+    """从辩论结果构建异构图。"""
+    records = build_graph_records(args.input, limit_blocks=args.limit_blocks, rounds=args.rounds, mode=args.mode)
     print(f"Graph records: {len(records)}")
     for record in records[: min(len(records), PRINT_SAMPLES)]:
         graph = record["graph"]
@@ -401,5 +402,4 @@ def _write_jsonl(path: str, records: list[dict[str, object]]) -> None:
 
 if __name__ == "__main__":
     main()
-
 

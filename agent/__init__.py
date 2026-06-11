@@ -1,4 +1,4 @@
-"""Offline debate-agent prototype for v2."""
+"""Debate-agent providers and orchestration for v2."""
 
 from agent.anthropic_compatible import (
     DeepSeekAnthropicDebateClient,
@@ -8,7 +8,12 @@ from agent.anthropic_compatible import (
 )
 from agent.client_factory import create_debate_client
 from agent.debate_orchestrator import DebateOrchestrator
-from agent.openai_compatible import BailianJudgeClient, BailianOpenAICompatibleDebateClient
+from agent.openai_compatible import (
+    BailianJudgeClient,
+    BailianOpenAICompatibleDebateClient,
+    SiliconFlowJudgeClient,
+    SiliconFlowOpenAICompatibleDebateClient,
+)
 from agent.schema import Argument, DebateTranscript, Evidence
 
 __all__ = [
@@ -22,8 +27,8 @@ __all__ = [
     "Evidence",
     "MiniMaxAnthropicDebateClient",
     "MiniMaxJudgeClient",
+    "SiliconFlowJudgeClient",
+    "SiliconFlowOpenAICompatibleDebateClient",
     "create_debate_client",
 ]
-
-
 

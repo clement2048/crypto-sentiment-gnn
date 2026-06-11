@@ -1,13 +1,11 @@
 """多智能体辩论编排器。
 
 它负责“谁在第几轮、第几个阶段发言”，不负责真实 LLM 调用细节。
-默认使用 MockDebateClient，方便离线稳定测试。
 """
 
 from __future__ import annotations
 
 from agent.llm_client import DebateClient
-from agent.mock_client import MockDebateClient
 from agent.prompts import core_roles_for_camp, reflection_role_for_camp, roles_for_camp
 from agent.schema import Argument, Camp, DebateTranscript
 from config import (
@@ -28,12 +26,12 @@ class DebateOrchestrator:
 
     def __init__(
         self,
-        client: DebateClient | None = None,
+        client: DebateClient,
         roles: tuple[str, ...] | None = DEFAULT_ROLES,
         intra_discussion_rounds: int = DEFAULT_INTRA_DISCUSSION_ROUNDS,
         counter_discussion_rounds: int = DEFAULT_COUNTER_DISCUSSION_ROUNDS,
     ):
-        self.client = client or MockDebateClient()
+        self.client = client
         self.roles = roles
         self.intra_discussion_rounds = max(0, int(intra_discussion_rounds))
         self.counter_discussion_rounds = max(0, int(counter_discussion_rounds))
@@ -199,7 +197,7 @@ class DebateOrchestrator:
                 )
                 arguments.append(reflection)
 
-                # 核心 agent 的 target 列表把 reflection 放在最后，保证 mock 和 LLM 都会优先看到它。
+                # 核心 agent 的 target 列表把 reflection 放在最后，保证 LLM 会优先看到它。
                 core_targets = list(reflection_targets) + [reflection.argument_id]
                 for role in self._core_roles_for_camp(camp):
                     seq += 1

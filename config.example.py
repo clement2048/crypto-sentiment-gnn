@@ -74,32 +74,17 @@ PRICE_TIE_COUNTS_AS_BULLISH = True
 
 
 # -----------------------------
-# Mock 辩论 agent
+# 辩论流程
 # -----------------------------
 
 # 默认辩论轮数：每轮 bull/bear 阵营各角色发言。
 DEFAULT_DEBATE_ROUNDS = 2
 
-# 每轮辩论中，阵营内"reflection -> 核心 agent 回应"的讨论次数。
+# 每轮辩论中，阵营内“reflection -> 核心 agent 回应”的讨论次数。
 DEFAULT_INTRA_DISCUSSION_ROUNDS = 1
 
-# 每轮跨阵营攻击后，阵营内"reflection 消化攻击 -> 核心 agent 再反驳"的次数。
+# 每轮跨阵营攻击后，阵营内“reflection 消化攻击 -> 核心 agent 再反驳”的次数。
 DEFAULT_COUNTER_DISCUSSION_ROUNDS = 1
-
-# 每个新论点最多回应最近多少个对方论点。
-MOCK_DEBATE_TARGET_LIMIT = 2
-
-# Mock 置信度合成公式。这里只是离线替身规则，不是实验结论。
-MOCK_CONFIDENCE_BASE = 0.55
-MOCK_CONFIDENCE_PRIOR_CAP = 4
-MOCK_CONFIDENCE_PRIOR_BONUS = 0.02
-MOCK_CONFIDENCE_PROFILE_BONUS = 0.08
-MOCK_CONFIDENCE_MAX = 0.92
-
-# Mock evidence relevance。真实 LLM 接入后，这部分应该由模型或评分器给出。
-MOCK_ROOT_COMMENT_RELEVANCE = 0.8
-MOCK_POST_RELEVANCE = 0.6
-MOCK_PROFILE_RELEVANCE = 0.5
 
 
 # -----------------------------
@@ -159,6 +144,23 @@ BAILIAN_CACHE_DIR = PROJECT_ROOT / "outputs" / "llm_cache" / "bailian"
 
 
 # -----------------------------
+# 硅基流动 OpenAI 兼容接口
+# -----------------------------
+
+SILICONFLOW_OPENAI_BASE_URL = "https://api.siliconflow.cn/v1"
+# 官方文档示例模型为 Pro/zai-org/GLM-4.7；可在 .env 中覆盖为账户可用模型。
+SILICONFLOW_MODEL = os.getenv("SILICONFLOW_MODEL", "Pro/zai-org/GLM-4.7")
+SILICONFLOW_API_KEY_ENV = os.getenv("SILICONFLOW_API_KEY", "")
+SILICONFLOW_MAX_TOKENS = 1200
+SILICONFLOW_TEMPERATURE = 0.2
+SILICONFLOW_ENABLE_THINKING = False
+SILICONFLOW_TIMEOUT_SECONDS = 120.0
+SILICONFLOW_HTTP_RETRIES = 3
+SILICONFLOW_CACHE_ENABLED = True
+SILICONFLOW_CACHE_DIR = PROJECT_ROOT / "outputs" / "llm_cache" / "siliconflow"
+
+
+# -----------------------------
 # 图张量特征
 # -----------------------------
 # 当前原型使用 8 维手工结构特征；后续可拼接文本 embedding。
@@ -206,38 +208,6 @@ FULL_PIPELINE_TRAIN_EPOCHS = 0
 LEARNING_RATE = 0.01
 PRINT_SAMPLES = 5
 
-
-# -----------------------------
-# Mock 法官
-# -----------------------------
-
-# ModelAwareMockJudge 中，p_bull 融合三类信号的权重。
-JUDGE_MODEL_WEIGHT = 0.60
-JUDGE_DEBATE_WEIGHT = 0.25
-JUDGE_MARGIN_WEIGHT = 0.15
-
-# 把 bull/bear 阵营平均置信度差值映射到 0~1 的经验公式。
-JUDGE_DEBATE_CENTER = 0.5
-JUDGE_DEBATE_DIFF_DIVISOR = 1.0
-
-# ODE margin 只取方向时使用的二值映射。
-JUDGE_MARGIN_BULL_VALUE = 1.0
-JUDGE_MARGIN_BEAR_VALUE = 0.0
-
-# p_bull 与 p_bear 太接近时判为 NEUTRAL。
-JUDGE_NEUTRAL_MARGIN = 0.08
-
-# confidence = base + abs(p_bull - p_bear) / divisor。
-JUDGE_CONFIDENCE_BASE = 0.5
-JUDGE_CONFIDENCE_DIFF_DIVISOR = 2.0
-
-# J 向量中 q/c 等规则分数的归一化尺度。
-JUDGE_EVIDENCE_QUALITY_SCALE = 3.0
-JUDGE_ROLE_COVERAGE_SCALE = 4.0
-
-# 旧 MockJudgeAgent 仍保留给兼容测试，不是完整 v2 pipeline 的最终法官。
-LEGACY_JUDGE_NEUTRAL_MARGIN = 0.05
-LEGACY_JUDGE_CONFIDENCE_BASE = 0.5
 
 # consistency 检查用的规则阈值。
 NEUTRAL_SCORE_IMBALANCE_THRESHOLD = 0.25

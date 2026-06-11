@@ -3,11 +3,11 @@
 这是当前主工作区的代码说明。旧版遗留代码已经归档到 `archive/legacy_v1/`，当前主要代码直接放在根目录：
 
 ```text
-agent/      多智能体辩论结构、mock Agent、DeepSeek/百炼/MiniMax LLM 接口
+agent/      多智能体辩论结构、DeepSeek/百炼/MiniMax/硅基流动 LLM 接口
 data/       JSONL 加载、过滤、CommentBlock 构建
 dataset/    默认数据集，当前读取 final.jsonl
 debate_graph/ 评论图、辩论图、异构图、图张量化
-judge/      法官输出 schema、parser、模型感知 mock Judge
+judge/      法官输出 schema、parser、在线 LLM Judge provider
 model/      BDG-ODE、GCN/GAT/GraphTransformer 等模型实验入口
 profiles/   时间安全用户画像
 scripts/    分阶段脚本
@@ -23,13 +23,13 @@ main.py     统一命令行入口
 JSONL 原始数据
   -> data: 构建 CommentBlock
   -> profiles: 构建 t < t0 的用户画像
-  -> agent: 生成多空辩论（默认 mock，可切换 DeepSeek / 百炼 / MiniMax）
+  -> agent: 生成多空辩论（DeepSeek / 百炼 / MiniMax / 硅基流动）
   -> debate_graph: 融合评论图 + 辩论图
   -> model: 图张量 -> 图模型方法 -> calibrator
   -> judge: 法官接收辩论结构 + ODE/模型摘要
 ```
 
-当前默认仍走离线 mock，方便稳定测试；辩论 Agent 与 Judge 已支持 DeepSeek Anthropic-compatible API、阿里云百炼 OpenAI-compatible API、MiniMax Anthropic-compatible API。
+当前主流程走在线 LLM provider；辩论 Agent 与 Judge 已支持 DeepSeek Anthropic-compatible API、阿里云百炼 OpenAI-compatible API、MiniMax Anthropic-compatible API、硅基流动 OpenAI-compatible API。旧离线 mock 流程已归档到 `archive/mock_pipeline.py`，不再由主代码导入。
 
 ## Python 环境
 
@@ -53,15 +53,17 @@ python main.py debate --limit-blocks 3 --rounds 1
 python main.py debate --limit-blocks 1 --rounds 1 --mode deepseek
 python main.py debate --limit-blocks 1 --rounds 1 --mode bailian
 python main.py debate --limit-blocks 1 --rounds 1 --mode minimax
+python main.py debate --limit-blocks 1 --rounds 1 --mode siliconflow
 python main.py graphs --limit-blocks 3 --rounds 1
 python main.py train-prototype --limit-blocks 3 --rounds 1 --epochs 3
 python main.py full --limit-blocks 3 --rounds 1 --train-epochs 1
 python main.py full --limit-blocks 1 --rounds 1 --debate-mode deepseek
 python main.py full --limit-blocks 1 --rounds 1 --debate-mode bailian --judge-mode bailian
 python main.py full --limit-blocks 1 --rounds 1 --debate-mode minimax --judge-mode minimax
-python main.py evaluate --rounds 1 --debate-mode mock
-python main.py evaluate --rounds 1 --debate-mode deepseek --metrics-json outputs/eval_metrics.json --output-jsonl outputs/eval_records.jsonl
-python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 1 --epochs 5 --debate-mode mock --seed 42 --output-json outputs/split_9_3_3_mock.json
+python main.py full --limit-blocks 1 --rounds 1 --debate-mode siliconflow --judge-mode siliconflow
+python main.py evaluate --rounds 1 --debate-mode minimax --judge-mode minimax
+python main.py evaluate --rounds 1 --debate-mode deepseek --judge-mode deepseek --metrics-json outputs/eval_metrics.json --output-jsonl outputs/eval_records.jsonl
+python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 1 --epochs 5 --debate-mode minimax --judge-mode minimax --seed 42 --output-json outputs/split_9_3_3_minimax.json
 python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 1 --epochs 5 --debate-mode deepseek --judge-mode deepseek --seed 42 --output-json outputs/split_9_3_3_deepseek.json
 python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 1 --epochs 5 --debate-mode bailian --judge-mode bailian --seed 42 --output-json outputs/split_9_3_3_bailian.json
 python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 1 --epochs 5 --debate-mode minimax --judge-mode minimax --seed 42 --output-json outputs/split_9_3_3_minimax.json
@@ -78,7 +80,7 @@ python -m scripts.export_metrics_csv --input-json outputs/split_9_3_3_deepseek.j
 | 命令 | 作用 |
 | --- | --- |
 | `blocks` | 读取 JSONL，构建评论块，打印过滤统计和时间切分 |
-| `debate` | 对每个评论块生成多空辩论，不调用法官；默认 mock，可用 `--mode deepseek` / `--mode bailian` / `--mode minimax` |
+| `debate` | 对每个评论块生成多空辩论，不调用法官；可用 `--mode deepseek` / `--mode bailian` / `--mode minimax` |
 | `graphs` | 将评论图和辩论图融合成多关系异构图 |
 | `train-prototype` | 用少量样本 smoke-train 当前最小模型 |
 | `full` | 执行完整原型：辩论 -> 图 -> 模型摘要 -> 法官 |
@@ -139,15 +141,14 @@ profiles = profile_store.get_profiles_for_block(block)
 
 ### `agent/`
 
-默认使用离线 mock，用于稳定跑通结构；需要真实 LLM 时可切换到 DeepSeek 或阿里云百炼。
+主流程使用在线 LLM provider；测试中的离线替身只存在于 `tests/fakes.py`，不属于生产代码路径。
 
 | 文件 | 作用 |
 | --- | --- |
 | `schema.py` | `Evidence`、`Argument`、`DebateTranscript` |
-| `mock_client.py` | 不依赖网络的 mock 辩论生成器 |
 | `anthropic_compatible.py` | Anthropic Messages 兼容协议共享层（DeepSeek + MiniMax），含 DebateClient 与 JudgeClient 基类 + 两个 provider 薄包装 |
-| `openai_compatible.py` | OpenAI Chat Completions 兼容协议共享层（Bailian），含 DebateClient 与 JudgeClient 基类 + Bailian 薄包装 |
-| `client_factory.py` | 根据 `mock/deepseek/bailian/minimax` 创建辩论 client |
+| `openai_compatible.py` | OpenAI Chat Completions 兼容协议共享层（Bailian + SiliconFlow），含 DebateClient 与 JudgeClient 基类 + provider 薄包装 |
+| `client_factory.py` | 根据 `deepseek/bailian/minimax/siliconflow` 创建辩论 client |
 | `debate_orchestrator.py` | 组织多轮 bull/bear agent 发言 |
 | `output_parser.py` | 解析结构化 Agent JSON |
 | `llm_client.py` | 真实/模拟 LLM provider 共用协议 |
@@ -244,6 +245,30 @@ MINIMAX_ANTHROPIC_BASE_URL = "https://api.minimax.io/anthropic"
 MINIMAX_MODEL = "MiniMax-M3"
 ```
 
+### 硅基流动 API Key
+
+硅基流动接口使用 OpenAI 兼容模式。运行前：
+
+```powershell
+$env:SILICONFLOW_API_KEY="你的硅基流动 API key"
+```
+
+或写到 `.env`：
+
+```bash
+SILICONFLOW_API_KEY=sk-你的key
+SILICONFLOW_MODEL=Pro/zai-org/GLM-4.7
+```
+
+默认配置在 `config.py`：
+
+```python
+SILICONFLOW_OPENAI_BASE_URL = "https://api.siliconflow.cn/v1"
+SILICONFLOW_MODEL = "Pro/zai-org/GLM-4.7"
+```
+
+模型名可以用 `SILICONFLOW_MODEL` 覆盖为账户中可用的免费或低成本模型。官方 OpenAI-compatible 文档：<https://docs.siliconflow.cn/cn/api-reference/chat-completions/chat-completions>。
+
 ## 图构建
 
 ### `debate_graph/`
@@ -305,13 +330,12 @@ summary = model.summarize(graph_tensor)
 | `judge_schema.py` | `JudgeScoreVector`、`JudgeOutput` |
 | `judge_parser.py` | 解析结构化 Judge JSON |
 | `consistency.py` | 检查 verdict、confidence、score vector 是否一致 |
-| `model_aware_judge.py` | 当前离线 mock 法官，接收 debate + model summary |
-| `judge_agent.py` | 早期 mock judge，保留作 schema smoke，不作为最终流程入口 |
+| `client_factory.py` | 根据 `deepseek/bailian/minimax/siliconflow` 创建在线法官 client |
 
 常用入口：
 
 ```python
-judge_output = ModelAwareMockJudge().judge(transcript, model_summary)
+judge_output = create_judge_client("minimax").judge(transcript, model_summary, graph)
 ```
 
 ## 脚本
@@ -350,7 +374,7 @@ python -m pytest tests -p no:cacheprovider
 - 消融实验
 - calibrator 接入法官评分向量 `J`
 
-> 真实 LLM Agent / Judge 已支持 DeepSeek / 阿里云百炼 / MiniMax 三家，详见上文「运行 LLM 真实辩论」段。
+> 真实 LLM Agent / Judge 已支持 DeepSeek / 阿里云百炼 / MiniMax / 硅基流动，详见上文「运行 LLM 真实辩论」段。
 
 详细 TODO 已整理在 Obsidian：
 

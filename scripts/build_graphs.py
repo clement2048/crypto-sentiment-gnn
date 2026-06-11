@@ -1,4 +1,4 @@
-"""Build heterogeneous graphs from comment blocks and mock debates."""
+﻿"""Build heterogeneous graphs from comment blocks and online debates."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from agent.llm_client import DebateClient
 from config import DEFAULT_DEBATE_ROUNDS, DEFAULT_LIMIT_BLOCKS
 from debate_graph import build_hetero_graph
 from debate_graph.diffusion_ops import normalized_relation_adjacency
@@ -20,12 +21,15 @@ def build_graph_records(
     input_path: str,
     limit_blocks: int | None = DEFAULT_LIMIT_BLOCKS,
     rounds: int = DEFAULT_DEBATE_ROUNDS,
+    mode: str = "minimax",
+    client: DebateClient | None = None,
 ) -> list[dict[str, object]]:
     debate_records = run_debate_pipeline(
         input_path=input_path,
         limit_blocks=limit_blocks,
         rounds=rounds,
-        mode="mock",
+        mode=mode,
+        client=client,
     )
     graph_records: list[dict[str, object]] = []
     for record in debate_records:
@@ -52,14 +56,15 @@ def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-    parser = argparse.ArgumentParser(description="Build hetero graphs from mock debate records.")
+    parser = argparse.ArgumentParser(description="Build hetero graphs from debate records.")
     parser.add_argument("--input", default=DEFAULT_INPUT, help="JSONL file, directory, or glob pattern.")
     parser.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
+    parser.add_argument("--mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     parser.add_argument("--output-jsonl", type=str, default=None)
     args = parser.parse_args()
 
-    records = build_graph_records(args.input, limit_blocks=args.limit_blocks, rounds=args.rounds)
+    records = build_graph_records(args.input, limit_blocks=args.limit_blocks, rounds=args.rounds, mode=args.mode)
     relation_totals: Counter[str] = Counter()
     print(f"Graph records: {len(records)}")
     for record in records:
@@ -115,5 +120,6 @@ def _comment_block_from_record(data: object) -> CommentBlock:
 
 if __name__ == "__main__":
     main()
+
 
 

@@ -12,6 +12,7 @@ from typing import Any
 import torch
 
 from agent import DebateOrchestrator, DebateTranscript, create_debate_client
+from agent.llm_client import DebateClient
 from config import DEFAULT_DEBATE_ROUNDS
 from data import build_comment_blocks, load_posts
 from data.schema import CommentBlock, PostRecord, RawComment, datetime_to_str
@@ -39,8 +40,10 @@ def run_case_study(
     max_blocks: int | None = None,
     rounds: int = 1,
     debate_mode: str = "deepseek",
-    judge_mode: str = "mock",
+    judge_mode: str = "minimax",
     seed: int = 42,
+    debate_client: DebateClient | None = None,
+    judge_client: object | None = None,
 ) -> dict[str, Any]:
     """选择一个多评论帖子，运行辩论并返回可序列化结果。"""
     torch.manual_seed(seed)
@@ -62,9 +65,9 @@ def run_case_study(
         setattr(block, "case_context_comments", [comment for comment in post.comments if comment.comment_id != block.root_comment.comment_id])
 
     profile_store = ProfileStore.from_blocks(all_blocks)
-    orchestrator = DebateOrchestrator(client=create_debate_client(debate_mode))
+    orchestrator = DebateOrchestrator(client=debate_client or create_debate_client(debate_mode))
     model = GraphSentimentModel(input_dim=NODE_FEATURE_DIM)
-    judge = create_judge_client(judge_mode)
+    judge = judge_client or create_judge_client(judge_mode)
 
     block_records: list[CaseBlockRecord] = []
     for block in post_blocks:
@@ -114,8 +117,8 @@ def main() -> None:
     parser.add_argument("--block-id", default=None)
     parser.add_argument("--max-blocks", type=int, default=None)
     parser.add_argument("--rounds", type=int, default=1)
-    parser.add_argument("--debate-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="deepseek")
-    parser.add_argument("--judge-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
+    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="deepseek")
+    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-json", default=None)
     parser.add_argument("--output-md", default=None)

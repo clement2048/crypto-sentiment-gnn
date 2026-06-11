@@ -17,6 +17,7 @@ from pathlib import Path
 import torch
 
 from agent import DebateOrchestrator, DebateTranscript, create_debate_client
+from agent.llm_client import DebateClient
 from config import DEFAULT_DEBATE_ROUNDS, DEFAULT_LIMIT_BLOCKS, FULL_PIPELINE_TRAIN_EPOCHS, LEARNING_RATE, PRINT_SAMPLES
 from data import build_comment_blocks, load_posts
 from data.schema import CommentBlock
@@ -48,8 +49,10 @@ def run_full_pipeline(
     rounds: int = DEFAULT_DEBATE_ROUNDS,
     train_epochs: int = FULL_PIPELINE_TRAIN_EPOCHS,
     learning_rate: float = LEARNING_RATE,
-    debate_mode: str = "mock",
-    judge_mode: str = "mock",
+    debate_mode: str = "minimax",
+    judge_mode: str = "minimax",
+    debate_client: DebateClient | None = None,
+    judge_client: object | None = None,
 ) -> list[dict[str, object]]:
     """运行完整 pipeline，并返回可 JSON 序列化的记录列表。"""
     contexts = _build_contexts(
@@ -57,13 +60,14 @@ def run_full_pipeline(
         limit_blocks=limit_blocks,
         rounds=rounds,
         debate_mode=debate_mode,
+        debate_client=debate_client,
     )
     model = GraphSentimentModel(input_dim=NODE_FEATURE_DIM)
     if train_epochs > 0:
         # 这是原型 smoke 训练，不是正式训练系统。
         _train_model(model, [context.graph_tensor for context in contexts], train_epochs, learning_rate)
 
-    judge = create_judge_client(judge_mode)
+    judge = judge_client or create_judge_client(judge_mode)
     records: list[dict[str, object]] = []
     for context in contexts:
         # 模型先给出 ODE/calibrator 摘要，然后法官基于该摘要和辩论结构做最终分析。
@@ -96,8 +100,8 @@ def main() -> None:
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     parser.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    parser.add_argument("--debate-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
-    parser.add_argument("--judge-mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
+    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     parser.add_argument("--output-jsonl", type=str, default=None)
     args = parser.parse_args()
 
@@ -137,6 +141,7 @@ def _build_contexts(
     limit_blocks: int | None,
     rounds: int,
     debate_mode: str,
+    debate_client: DebateClient | None = None,
 ) -> list[PipelineContext]:
     """构建完整流程需要的中间对象，但暂不运行模型和法官。"""
     posts = load_posts(input_path)
@@ -145,7 +150,7 @@ def _build_contexts(
         blocks = blocks[:limit_blocks]
 
     profile_store = ProfileStore.from_blocks(blocks)
-    orchestrator = DebateOrchestrator(client=create_debate_client(debate_mode))
+    orchestrator = DebateOrchestrator(client=debate_client or create_debate_client(debate_mode))
     contexts: list[PipelineContext] = []
     for block in blocks:
         # 每个 block 独立生成画像、辩论和异构图。
@@ -186,7 +191,5 @@ def _train_model(
 
 if __name__ == "__main__":
     main()
-
-
 
 

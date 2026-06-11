@@ -3,37 +3,17 @@
 from __future__ import annotations
 
 from agent.anthropic_compatible import DeepSeekJudgeClient, MiniMaxJudgeClient
-from agent.openai_compatible import BailianJudgeClient
-from agent.schema import DebateTranscript
-from debate_graph.schema import HeteroGraph
-from judge.judge_schema import JudgeOutput
-from judge.model_aware_judge import ModelAwareMockJudge
-from model.model_summary import ModelOutputSummary
+from agent.openai_compatible import BailianJudgeClient, SiliconFlowJudgeClient
 
 
-class ModelAwareMockJudgeClient:
-    """Adapter that shares the same call shape as online judge providers."""
-
-    def __init__(self):
-        self.inner = ModelAwareMockJudge()
-
-    def judge(
-        self,
-        transcript: DebateTranscript,
-        model_summary: ModelOutputSummary,
-        graph: HeteroGraph,
-    ) -> JudgeOutput:
-        return self.inner.judge(transcript, model_summary)
-
-
-def create_judge_client(mode: str = "mock"):
+def create_judge_client(mode: str = "minimax"):
     """根据运行模式创建法官 provider。"""
-    if mode == "mock":
-        return ModelAwareMockJudgeClient()
     if mode == "deepseek":
         return DeepSeekJudgeClient()
     if mode == "bailian":
         return BailianJudgeClient()
     if mode == "minimax":
         return MiniMaxJudgeClient()
+    if mode == "siliconflow":
+        return SiliconFlowJudgeClient()
     raise ValueError(f"Unsupported judge mode: {mode}")

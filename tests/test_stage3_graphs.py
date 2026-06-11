@@ -11,6 +11,7 @@ from data.schema import CommentBlock, RawComment
 from debate_graph import build_comment_graph, build_debate_graph, build_hetero_graph
 from debate_graph.diffusion_ops import normalized_relation_adjacency
 from profiles import ProfileStore
+from tests.fakes import FakeDebateClient
 from scripts.build_graphs import build_graph_records
 
 
@@ -71,7 +72,12 @@ class StageThreeGraphTest(unittest.TestCase):
                 self.assertAlmostEqual(value, 1.0)
 
     def test_build_graph_records_smoke(self):
-        records = build_graph_records(str(FIXTURE), limit_blocks=1, rounds=1)
+        records = build_graph_records(
+            str(FIXTURE),
+            limit_blocks=1,
+            rounds=1,
+            client=FakeDebateClient(),
+        )
 
         self.assertEqual(len(records), 1)
         graph = records[0]["graph"]
@@ -87,7 +93,7 @@ def _fixture_block_and_transcript(rounds: int) -> tuple[CommentBlock, DebateTran
     assert not issues
     block = blocks[0]
     profiles = ProfileStore.from_blocks(blocks).get_profiles_for_block(block)
-    transcript = DebateOrchestrator().run(block, profiles, rounds=rounds)
+    transcript = DebateOrchestrator(client=FakeDebateClient()).run(block, profiles, rounds=rounds)
     return block, transcript
 
 

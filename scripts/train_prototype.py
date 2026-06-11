@@ -1,4 +1,4 @@
-"""Train a tiny graph sentiment prototype on mock debate graphs."""
+﻿"""Train a tiny graph sentiment prototype on debate graphs."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ import sys
 
 import torch
 
-from agent import DebateOrchestrator
+from agent import DebateOrchestrator, create_debate_client
+from agent.llm_client import DebateClient
 from config import DEFAULT_DEBATE_ROUNDS, LEARNING_RATE, TRAIN_PROTOTYPE_EPOCHS, TRAIN_PROTOTYPE_LIMIT_BLOCKS
 from data import build_comment_blocks, load_posts
 from debate_graph import build_hetero_graph, graph_to_tensor
@@ -22,13 +23,15 @@ def build_training_tensors(
     input_path: str,
     limit_blocks: int | None = TRAIN_PROTOTYPE_LIMIT_BLOCKS,
     rounds: int = DEFAULT_DEBATE_ROUNDS,
+    mode: str = "minimax",
+    client: DebateClient | None = None,
 ) -> list[GraphTensor]:
     posts = load_posts(input_path)
     blocks, _issues = build_comment_blocks(posts)
     if limit_blocks is not None:
         blocks = blocks[:limit_blocks]
     profile_store = ProfileStore.from_blocks(blocks)
-    orchestrator = DebateOrchestrator()
+    orchestrator = DebateOrchestrator(client=client or create_debate_client(mode))
 
     tensors: list[GraphTensor] = []
     for block in blocks:
@@ -45,8 +48,16 @@ def train_prototype(
     rounds: int = DEFAULT_DEBATE_ROUNDS,
     epochs: int = TRAIN_PROTOTYPE_EPOCHS,
     learning_rate: float = LEARNING_RATE,
+    mode: str = "minimax",
+    client: DebateClient | None = None,
 ) -> dict[str, float]:
-    tensors = build_training_tensors(input_path, limit_blocks=limit_blocks, rounds=rounds)
+    tensors = build_training_tensors(
+        input_path,
+        limit_blocks=limit_blocks,
+        rounds=rounds,
+        mode=mode,
+        client=client,
+    )
     if not tensors:
         raise ValueError("No graph tensors available for training")
 
@@ -83,6 +94,7 @@ def main() -> None:
     parser.add_argument("--input", default=DEFAULT_INPUT)
     parser.add_argument("--limit-blocks", type=int, default=TRAIN_PROTOTYPE_LIMIT_BLOCKS)
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
+    parser.add_argument("--mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
     parser.add_argument("--epochs", type=int, default=TRAIN_PROTOTYPE_EPOCHS)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
     args = parser.parse_args()
@@ -93,6 +105,7 @@ def main() -> None:
         rounds=args.rounds,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
+        mode=args.mode,
     )
     print(
         "Prototype training complete: "
@@ -104,6 +117,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
