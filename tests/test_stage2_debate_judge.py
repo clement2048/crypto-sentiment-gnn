@@ -5,18 +5,21 @@ import unittest
 from pathlib import Path
 
 from agent import DebateOrchestrator
-from agent.bailian_client import BailianOpenAICompatibleDebateClient
-from agent.deepseek_client import DeepSeekAnthropicDebateClient, _load_api_key_from_dotenv_text
+from agent.anthropic_compatible import (
+    DeepSeekAnthropicDebateClient,
+    DeepSeekJudgeClient,
+    _load_api_key_from_dotenv_text,
+)
+from agent.openai_compatible import BailianJudgeClient, BailianOpenAICompatibleDebateClient
 from agent.output_parser import parse_argument_json
 from data import build_comment_blocks, load_posts
 from debate_graph import build_hetero_graph, graph_to_tensor
 from judge import MockJudgeAgent
-from judge.bailian_judge_client import BailianJudgeClient
 from judge.consistency import check_judge_consistency
-from judge.deepseek_judge_client import DeepSeekJudgeClient
 from judge.judge_parser import parse_judge_json
 from judge.judge_schema import JudgeOutput, JudgeScoreVector
 from model import GraphSentimentModel
+from config import BAILIAN_MODEL
 from profiles import ProfileStore
 from scripts.evaluate_pipeline import compute_metrics
 from scripts.run_debate import run_debate_pipeline
@@ -308,7 +311,7 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
         )
 
         def fake_transport(payload):
-            self.assertEqual(payload["model"], "deepseek-v4-flash")
+            self.assertEqual(payload["model"], BAILIAN_MODEL)
             self.assertFalse(payload["enable_thinking"])
             self.assertIn("messages", payload)
             self.assertEqual(payload["messages"][0]["role"], "system")
@@ -449,7 +452,7 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
         block, profiles = _load_first_block_and_profiles()
 
         def fake_transport(payload):
-            self.assertEqual(payload["model"], "deepseek-v4-flash")
+            self.assertEqual(payload["model"], BAILIAN_MODEL)
             self.assertFalse(payload["enable_thinking"])
             self.assertNotIn("thinking", payload)
             self.assertEqual(payload["messages"][0]["role"], "system")
@@ -604,5 +607,4 @@ def _phase_targets_reflection(arguments, response_phase: str, reflection_phase: 
 
 if __name__ == "__main__":
     unittest.main()
-
 

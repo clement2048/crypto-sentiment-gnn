@@ -3,7 +3,7 @@
 这是当前主工作区的代码说明。旧版遗留代码已经归档到 `archive/legacy_v1/`，当前主要代码直接放在根目录：
 
 ```text
-agent/      多智能体辩论结构、mock Agent、DeepSeek/百炼 LLM 接口
+agent/      多智能体辩论结构、mock Agent、DeepSeek/百炼/MiniMax LLM 接口
 data/       JSONL 加载、过滤、CommentBlock 构建
 dataset/    默认数据集，当前读取 final.jsonl
 debate_graph/ 评论图、辩论图、异构图、图张量化
@@ -23,13 +23,25 @@ main.py     统一命令行入口
 JSONL 原始数据
   -> data: 构建 CommentBlock
   -> profiles: 构建 t < t0 的用户画像
-  -> agent: 生成多空辩论（默认 mock，可切换 DeepSeek 或百炼）
+  -> agent: 生成多空辩论（默认 mock，可切换 DeepSeek / 百炼 / MiniMax）
   -> debate_graph: 融合评论图 + 辩论图
   -> model: 图张量 -> 图模型方法 -> calibrator
   -> judge: 法官接收辩论结构 + ODE/模型摘要
 ```
 
-当前默认仍走离线 mock，方便稳定测试；辩论 Agent 与 Judge 已支持 DeepSeek Anthropic-compatible API 和阿里云百炼 OpenAI-compatible API。
+当前默认仍走离线 mock，方便稳定测试；辩论 Agent 与 Judge 已支持 DeepSeek Anthropic-compatible API、阿里云百炼 OpenAI-compatible API、MiniMax Anthropic-compatible API。
+
+## Python 环境
+
+项目运行需要 `torch`。**推荐使用 anaconda 的 sentiment 环境**：
+
+```bash
+"D:/anaconda/envs/sentiment/python.exe" main.py debate --limit-blocks 1 --rounds 1
+```
+
+- 该环境已装 `torch 2.11.0+cpu`。
+- **未装 pytest**：跑测试用 `python -m unittest discover -s tests`（等价覆盖 4 个 stage 测试文件）。
+- 系统默认 `python` 路径（如 `C:\Python314\python.exe`）通常没装 torch，直接调 `python main.py ...` 会因 `debate_graph/graph_batch.py` import torch 失败。
 
 ## 统一入口
 
@@ -40,17 +52,21 @@ python main.py blocks
 python main.py debate --limit-blocks 3 --rounds 1
 python main.py debate --limit-blocks 1 --rounds 1 --mode deepseek
 python main.py debate --limit-blocks 1 --rounds 1 --mode bailian
+python main.py debate --limit-blocks 1 --rounds 1 --mode minimax
 python main.py graphs --limit-blocks 3 --rounds 1
 python main.py train-prototype --limit-blocks 3 --rounds 1 --epochs 3
 python main.py full --limit-blocks 3 --rounds 1 --train-epochs 1
 python main.py full --limit-blocks 1 --rounds 1 --debate-mode deepseek
 python main.py full --limit-blocks 1 --rounds 1 --debate-mode bailian --judge-mode bailian
+python main.py full --limit-blocks 1 --rounds 1 --debate-mode minimax --judge-mode minimax
 python main.py evaluate --rounds 1 --debate-mode mock
 python main.py evaluate --rounds 1 --debate-mode deepseek --metrics-json outputs/eval_metrics.json --output-jsonl outputs/eval_records.jsonl
 python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 1 --epochs 5 --debate-mode mock --seed 42 --output-json outputs/split_9_3_3_mock.json
 python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 1 --epochs 5 --debate-mode deepseek --judge-mode deepseek --seed 42 --output-json outputs/split_9_3_3_deepseek.json
 python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 1 --epochs 5 --debate-mode bailian --judge-mode bailian --seed 42 --output-json outputs/split_9_3_3_bailian.json
+python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 1 --epochs 5 --debate-mode minimax --judge-mode minimax --seed 42 --output-json outputs/split_9_3_3_minimax.json
 python main.py case-study --post-id 305698686327490 --rounds 1 --debate-mode deepseek --seed 42 --output-json outputs/case_305698686327490_deepseek.json --output-md outputs/case_305698686327490_deepseek.md
+python main.py case-study --post-id 305698686327490 --rounds 1 --debate-mode minimax --seed 42 --output-json outputs/case_305698686327490_minimax.json --output-md outputs/case_305698686327490_minimax.md
 python -m scripts.export_case_csv --input-json outputs/case_305698686327490_deepseek.json --output-dir outputs/case_305698686327490_deepseek_csv
 python -m scripts.export_metrics_csv --input-json outputs/split_9_3_3_deepseek.json --output-csv outputs/split_9_3_3_deepseek_metrics.csv
 ```
@@ -62,7 +78,7 @@ python -m scripts.export_metrics_csv --input-json outputs/split_9_3_3_deepseek.j
 | 命令 | 作用 |
 | --- | --- |
 | `blocks` | 读取 JSONL，构建评论块，打印过滤统计和时间切分 |
-| `debate` | 对每个评论块生成多空辩论，不调用法官；默认 mock，可用 `--mode deepseek` 或 `--mode bailian` |
+| `debate` | 对每个评论块生成多空辩论，不调用法官；默认 mock，可用 `--mode deepseek` / `--mode bailian` / `--mode minimax` |
 | `graphs` | 将评论图和辩论图融合成多关系异构图 |
 | `train-prototype` | 用少量样本 smoke-train 当前最小模型 |
 | `full` | 执行完整原型：辩论 -> 图 -> 模型摘要 -> 法官 |
@@ -129,9 +145,9 @@ profiles = profile_store.get_profiles_for_block(block)
 | --- | --- |
 | `schema.py` | `Evidence`、`Argument`、`DebateTranscript` |
 | `mock_client.py` | 不依赖网络的 mock 辩论生成器 |
-| `deepseek_client.py` | DeepSeek Anthropic-compatible Messages API 客户端 |
-| `bailian_client.py` | 阿里云百炼 OpenAI-compatible Chat Completions API 客户端 |
-| `client_factory.py` | 根据 `mock/deepseek/bailian` 创建辩论 client |
+| `anthropic_compatible.py` | Anthropic Messages 兼容协议共享层（DeepSeek + MiniMax），含 DebateClient 与 JudgeClient 基类 + 两个 provider 薄包装 |
+| `openai_compatible.py` | OpenAI Chat Completions 兼容协议共享层（Bailian），含 DebateClient 与 JudgeClient 基类 + Bailian 薄包装 |
+| `client_factory.py` | 根据 `mock/deepseek/bailian/minimax` 创建辩论 client |
 | `debate_orchestrator.py` | 组织多轮 bull/bear agent 发言 |
 | `output_parser.py` | 解析结构化 Agent JSON |
 | `llm_client.py` | 真实/模拟 LLM provider 共用协议 |
@@ -171,6 +187,8 @@ $env:DEEPSEEK_API_KEY="你的 DeepSeek API key"
 $env:ANTHROPIC_API_KEY="你的 DeepSeek API key"
 ```
 
+也可以写到项目根目录 `.env`（已加入 `.gitignore`，不会被上传），模板见 `.env.example`。`_load_env_file()` 会自动加载到 `os.environ`。
+
 默认配置在 `config.py`：
 
 ```python
@@ -180,19 +198,52 @@ DEEPSEEK_MODEL = "deepseek-v4-pro"
 
 ### 阿里云百炼 API Key
 
-百炼接口使用 OpenAI 兼容模式，默认模型为 `deepseek-v4-flash`。运行前在 PowerShell 中设置：
+百炼接口使用 OpenAI 兼容模式，当前默认模型以 `config.py` 的 `BAILIAN_MODEL` 为准。
 
 ```powershell
 $env:DASHSCOPE_API_KEY="你的阿里云百炼 API key"
+```
+
+或写到 `.env`：
+
+```bash
+BAILIAN_API_KEY=sk-你的key
+DASHSCOPE_API_KEY=sk-你的key   # 备用别名
 ```
 
 默认配置在 `config.py`：
 
 ```python
 BAILIAN_OPENAI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-BAILIAN_MODEL = "deepseek-v4-flash"
+BAILIAN_MODEL = "qwen-flash"
 BAILIAN_ENABLE_THINKING = False
 ```
+
+### MiniMax API Key
+
+MiniMax 接口使用 Anthropic Messages 兼容协议（与 DeepSeek 同一族），默认模型 `MiniMax-M3`。运行前：
+
+```powershell
+$env:ANTHROPIC_API_KEY="你的 MiniMax API key"   # 推荐：与 SDK 共用
+$env:MINIMAX_API_KEY="你的 MiniMax API key"     # 备用别名
+```
+
+或写到 `.env`：
+
+```bash
+ANTHROPIC_API_KEY=sk-你的minimax-key
+MINIMAX_API_KEY=sk-你的minimax-key   # 备用别名
+```
+
+`_load_api_key` 会按 `ANTHROPIC_API_KEY → MINIMAX_API_KEY` 顺序读，填任一个即可。官方文档：[platform.minimax.io/docs/token-plan/quickstart](https://platform.minimax.io/docs/token-plan/quickstart)。
+
+默认配置在 `config.py`：
+
+```python
+MINIMAX_ANTHROPIC_BASE_URL = "https://api.minimax.io/anthropic"
+MINIMAX_MODEL = "MiniMax-M3"
+```
+
 ## 图构建
 
 ### `debate_graph/`
@@ -292,13 +343,14 @@ python -m pytest tests -p no:cacheprovider
 
 主要还缺这些：
 
-- 真实 LLM Agent / Judge 接入
 - 正式训练系统：时间切分、batch、checkpoint、early stopping
 - 完整损失函数：`L_mse / L0 / L1 / L2 / L3 / L_judge_cons`
 - 评估模块：Accuracy、Macro-F1、ECE、Brier、Market Match Rate
 - 市场行为验证模块
 - 消融实验
 - calibrator 接入法官评分向量 `J`
+
+> 真实 LLM Agent / Judge 已支持 DeepSeek / 阿里云百炼 / MiniMax 三家，详见上文「运行 LLM 真实辩论」段。
 
 详细 TODO 已整理在 Obsidian：
 

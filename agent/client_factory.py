@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from agent.bailian_client import BailianOpenAICompatibleDebateClient
-from agent.deepseek_client import DeepSeekAnthropicDebateClient
+from agent.anthropic_compatible import DeepSeekAnthropicDebateClient, MiniMaxAnthropicDebateClient
 from agent.llm_client import DebateClient
 from agent.mock_client import MockDebateClient
+from agent.openai_compatible import BailianOpenAICompatibleDebateClient
 
 
 def create_debate_client(mode: str = "mock") -> DebateClient:
@@ -16,4 +16,6 @@ def create_debate_client(mode: str = "mock") -> DebateClient:
         return DeepSeekAnthropicDebateClient()
     if mode == "bailian":
         return BailianOpenAICompatibleDebateClient()
+    if mode == "minimax":
+        return MiniMaxAnthropicDebateClient()
     raise ValueError(f"Unsupported debate client mode: {mode}")

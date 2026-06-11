@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from agent.anthropic_compatible import DeepSeekJudgeClient, MiniMaxJudgeClient
+from agent.openai_compatible import BailianJudgeClient
 from agent.schema import DebateTranscript
 from debate_graph.schema import HeteroGraph
-from judge.bailian_judge_client import BailianJudgeClient
-from judge.deepseek_judge_client import DeepSeekJudgeClient
 from judge.judge_schema import JudgeOutput
 from judge.model_aware_judge import ModelAwareMockJudge
 from model.model_summary import ModelOutputSummary
@@ -34,4 +34,6 @@ def create_judge_client(mode: str = "mock"):
         return DeepSeekJudgeClient()
     if mode == "bailian":
         return BailianJudgeClient()
+    if mode == "minimax":
+        return MiniMaxJudgeClient()
     raise ValueError(f"Unsupported judge mode: {mode}")

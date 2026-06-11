@@ -1,15 +1,23 @@
-"""Judge prototype for debate transcripts."""
+"""Judge prototype for debate transcripts.
 
-from judge.bailian_judge_client import BailianJudgeClient
+在线 judge client 类现在物理位置在 ``agent/`` 包下(因为协议与 debate client
+共享),需要直接 import 时请走:
+
+    from agent.anthropic_compatible import DeepSeekJudgeClient, MiniMaxJudgeClient
+    from agent.openai_compatible import BailianJudgeClient
+
+或者通过工厂间接获取(推荐,避免循环 import):
+
+    from judge import create_judge_client
+    client = create_judge_client("minimax")
+"""
+
 from judge.client_factory import create_judge_client
-from judge.deepseek_judge_client import DeepSeekJudgeClient
 from judge.judge_agent import MockJudgeAgent
 from judge.judge_schema import JudgeOutput, JudgeScoreVector
 from judge.model_aware_judge import ModelAwareMockJudge
 
 __all__ = [
-    "BailianJudgeClient",
-    "DeepSeekJudgeClient",
     "JudgeOutput",
     "JudgeScoreVector",
     "MockJudgeAgent",

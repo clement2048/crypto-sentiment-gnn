@@ -56,7 +56,7 @@ def main() -> None:
     parser.add_argument("--limit-posts", type=int, default=None)
     parser.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    parser.add_argument("--mode", choices=["mock", "deepseek", "bailian"], default="mock")
+    parser.add_argument("--mode", choices=["mock", "deepseek", "bailian", "minimax"], default="mock")
     parser.add_argument("--output-jsonl", type=str, default=None)
     args = parser.parse_args()
 

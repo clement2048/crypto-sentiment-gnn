@@ -122,6 +122,26 @@ DEEPSEEK_CACHE_DIR = PROJECT_ROOT / "outputs" / "llm_cache" / "deepseek"
 
 
 # -----------------------------
+# MiniMax Anthropic 兼容接口
+# (https://platform.minimax.io/docs/token-plan/quickstart)
+# 与官方 anthropic SDK 共用 ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY；
+# 备用别名 MINIMAX_API_KEY，便于本地直接命名。
+# -----------------------------
+
+MINIMAX_ANTHROPIC_BASE_URL = "https://api.minimax.io/anthropic"
+MINIMAX_MODEL = "MiniMax-M3"
+MINIMAX_API_KEY_ENV = os.getenv("ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")
+MINIMAX_FALLBACK_API_KEY_ENV = "MINIMAX_API_KEY"
+MINIMAX_MAX_TOKENS = 1000
+MINIMAX_TEMPERATURE = 0.2
+MINIMAX_TIMEOUT_SECONDS = 120.0
+MINIMAX_HTTP_RETRIES = 3
+MINIMAX_ANTHROPIC_VERSION = "2023-06-01"
+MINIMAX_CACHE_ENABLED = True
+MINIMAX_CACHE_DIR = PROJECT_ROOT / "outputs" / "llm_cache" / "minimax"
+
+
+# -----------------------------
 # 阿里云百炼 OpenAI 兼容接口
 # -----------------------------
 

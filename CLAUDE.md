@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **论文**：`E:\obsidian\knowledge\基于舆情的异常活动检测\市场波动对股民情绪影响\市场波动对股民情绪的影响_v4.md` —— 角色名、阶段名、损失项 `L_cls / L_mse / L0~L3 / L_judge_cons / L_activity`、评估指标（Accuracy / Macro-F1 / ECE / Brier / MSED / Judge Consistency / Market Match / Activity Stratified）都源自这份论文，**改论文任何定义前先到这里看原文**。
 - **框架设计**：`E:\obsidian\knowledge\基于舆情的异常活动检测\市场波动对股民情绪影响\框架设计\情绪分析系统_v2.md` —— v2 的修订目标（标签口径、时间边界、市场行为验证、法官训练边界）和六阶段流水线都写在这；当前代码骨架直接对应这份文档。
 - **实时 TODO 追踪**：`E:\obsidian\knowledge\基于舆情的异常活动检测\市场波动对股民情绪影响\框架设计\情绪分析系统_v2_实现进度与TODO.md` —— 哪块已实现、哪块待做、待做的优先级都在这张表里，**改代码前先看这里确认是否还在 TODO 列表**。
+- **图神经网络/图学习文献**：`E:\obsidian\knowledge\基于舆情的异常活动检测\市场波动对股民情绪影响\相关文献\图神经网络的论文` —— GCN / GAT / Graph Transformer / 异构图 / 图时序建模等模型实现和实验设计，优先参考这里的论文笔记；不要只凭通用印象随意写 GNN 结构。
 - **整个文件夹** `E:\obsidian\knowledge\基于舆情的异常活动检测\市场波动对股民情绪影响\` 的所有内容（Agent 提示词设计、文献调研、待解决问题、优化思路、研究协作记录、归档等）都和这个项目有关，修改时遇到不确定的语义应该先去那里查。
 
 **README 已经指向 TODO 文件，但只给了一行** —— 实际 TODO 表里 `2.2 正式训练系统`、`2.3 损失函数`、`2.4 评估模块`、`2.5 市场行为验证`、`2.6 消融实验`、`2.7 calibrator 接入法官 J`、`2.8 BDG-ODE 轨迹监督` 都是高优先级空缺，看到 `model/losses.py` 只有 `classification_loss`、`scripts/evaluate_pipeline.py` 精度实现简陋、不要误以为"已完成"。
@@ -32,19 +33,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `profiles/`（复数）不是 `profile/`，刻意避免遮蔽 Python 标准库 `profile`，否则 `import cProfile` 会失败。
 - 默认数据来源是 `dataset/final.jsonl`（220 行），可用 `--input` 覆盖。
-- 真实 LLM 的 response cache 默认落在 `outputs/llm_cache/{deepseek,bailian}/`。
+- 真实 LLM 的 response cache 默认落在 `outputs/llm_cache/{deepseek,bailian,minimax}/`。
+
+## Python 环境
+
+项目运行需要 torch（已通过 `profiles/` 时间安全机制用到的 `bisect_left` 不依赖 torch，但模型/图构建依赖）。**默认使用 anaconda 的 sentiment 环境**：
+
+```bash
+"D:/anaconda/envs/sentiment/python.exe" main.py debate --limit-blocks 1 --rounds 1
+```
+
+- 该环境已装 `torch 2.11.0+cpu`。
+- **未装 pytest**：跑测试用 `python -m unittest discover -s tests`（与 pytest 等价覆盖 4 个 stage 测试文件）。
+- 系统默认 `python` 路径（如 `C:\Python314\python.exe`）通常没装 torch，直接调 `python main.py ...` 会因 `debate_graph/graph_batch.py` import torch 失败。
+- IDE 终端如果默认走 anaconda base，注意切到 sentiment 环境后再跑。
 
 ## 统一入口：`main.py` 子命令
 
 ```bash
 python main.py blocks                                  # 加载 JSONL，打印 CommentBlock 统计 + 时间切分
 python main.py debate --limit-blocks 3 --rounds 1      # 仅生成辩论（默认 mock）
-python main.py debate --limit-blocks 1 --mode deepseek # 真实 LLM 辩论
-python main.py debate --limit-blocks 1 --mode bailian  # 阿里云百炼
+python main.py debate --limit-blocks 1 --mode deepseek # DeepSeek 真实 LLM 辩论
+python main.py debate --limit-blocks 1 --mode bailian  # 阿里云百炼 OpenAI 兼容
+python main.py debate --limit-blocks 1 --mode minimax  # MiniMax Anthropic 兼容
 python main.py graphs --limit-blocks 3 --rounds 1      # 融合评论图+辩论图
 python main.py train-prototype --epochs 3              # 最小可训练 smoke
 python main.py full --limit-blocks 1 --rounds 1        # 完整链路：辩论→图→模型摘要→法官
 python main.py full --limit-blocks 1 --debate-mode deepseek --judge-mode deepseek
+python main.py full --limit-blocks 1 --debate-mode minimax --judge-mode minimax
 python main.py evaluate --rounds 1 --metrics-json outputs/eval_metrics.json
 python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --epochs 5 --seed 42 --output-json outputs/split_9_3_3_mock.json
 python main.py case-study --post-id 305698686327490 --debate-mode deepseek --output-md outputs/case.md
@@ -94,8 +110,11 @@ JudgeOutput (verdict ∈ {BULLISH, BEARISH, NEUTRAL} + confidence + report + sco
 | `profiles/user_profile.py` | `UserProfile` 计算逻辑；冷启动画像字段在 `config.py` |
 | `agent/prompts.py` | 论文 v4 角色名、阶段名、提示词；新角色先改这里再改 client |
 | `agent/debate_orchestrator.py` | 只控制"谁在第几轮第几个阶段发言"，不写 LLM 调用细节 |
-| `agent/client_factory.py` | `mock` / `deepseek` / `bailian` 模式切换 |
-| `agent/{mock,deepseek,bailian}_client.py` | 三种 client；都实现 `DebateClient.generate_argument` |
+| `agent/client_factory.py` | `mock` / `deepseek` / `bailian` / `minimax` 模式切换 |
+| `agent/mock_client.py` | 离线 mock 辩论生成器（规则生成，不依赖网络） |
+| `agent/anthropic_compatible.py` | Anthropic Messages 兼容协议共享层（DeepSeek + MiniMax），含 DebateClient 与 JudgeClient 基类 + 两个 provider 薄包装 |
+| `agent/openai_compatible.py` | OpenAI Chat Completions 兼容协议共享层（Bailian），含 DebateClient 与 JudgeClient 基类 + Bailian 薄包装 |
+| `judge/client_factory.py` | `mock` / `deepseek` / `bailian` / `minimax` 法官 provider 切换 |
 | `debate_graph/comment_graph.py` | 评论树→reply 边 |
 | `debate_graph/debate_graph.py` | Argument→cite/support/attack/respond/propose 边 |
 | `debate_graph/hetero_graph.py` | 融合两图 + 节点去重 + 端点缺失边丢弃 |
@@ -115,29 +134,40 @@ JudgeOutput (verdict ∈ {BULLISH, BEARISH, NEUTRAL} + confidence + report + sco
 
 ## 运行 LLM 真实辩论
 
-API key 写在 `config.py` 中是反模式（已硬编码到仓库里，见 `DEEPSEEK_API_KEY_ENV` / `BAILIAN_API_KEY_ENV`），**修改时注意：先在本地覆盖，再考虑加 `.env` 方案**。PowerShell 临时覆盖：
+API key 不写在 `config.py` 里（commit `4b08e29` 已切到 `.env` + 环境变量双轨）。优先级：
+
+1. **`.env` 文件**（项目根目录，已加入 `.gitignore`）—— 推荐方式，跨 shell 持久。模板见 `.env.example`。
+2. **环境变量** —— PowerShell 临时覆盖：
 
 ```powershell
-$env:DEEPSEEK_API_KEY="sk-..."
-$env:ANTHROPIC_API_KEY="sk-..."  # 兼容别名
-$env:DASHSCOPE_API_KEY="sk-..."
+$env:DEEPSEEK_API_KEY="sk-..."          # DeepSeek 辩论
+$env:ANTHROPIC_API_KEY="sk-..."         # 兼容别名；MiniMax 也读这个
+$env:MINIMAX_API_KEY="sk-..."           # MiniMax 备用别名
+$env:DASHSCOPE_API_KEY="sk-..."         # 阿里云百炼（OpenAI 兼容）
+$env:BAILIAN_API_KEY="sk-..."           # 阿里云百炼备用别名
 ```
+
+`_load_env_file()` 在 `config.py:20-32` 会把 `.env` 注入到 `os.environ`（`setdefault`，shell 已 export 的同名变量优先）。
 
 默认端点：
 - DeepSeek Anthropic 兼容：`https://api.deepseek.com/anthropic`，模型 `deepseek-v4-pro`
-- 阿里云百炼 OpenAI 兼容：`https://dashscope.aliyuncs.com/compatible-mode/v1`，模型 `deepseek-v4-flash`
+- 阿里云百炼 OpenAI 兼容：`https://dashscope.aliyuncs.com/compatible-mode/v1`，模型以 `config.py` 的 `BAILIAN_MODEL` 为准（当前为 `qwen-flash`）
+- MiniMax Anthropic 兼容：`https://api.minimax.io/anthropic`，模型 `MiniMax-M3`
 
 ## 测试
 
 ```bash
+# 推荐:unittest(sentiment 环境没装 pytest)
 python -m unittest discover -s tests
+
+# 如果装了 pytest:
 python -m pytest tests -p no:cacheprovider
 ```
 
 - `pytest.ini` 全局禁用 `cacheprovider`（Windows 沙箱下 cache 写权限问题）。
 - 4 个 stage 测试文件：`test_stage1_pipeline.py` / `test_stage2_debate_judge.py` / `test_stage3_graphs.py` / `test_stage4_model.py`。
 - `test_stage4_model.py::test_split_experiment_smoke` 在没有 `dataset/final.jsonl` 时会 skip。
-- 单文件运行：`python -m pytest tests/test_stage3_graphs.py -p no:cacheprovider -v`。
+- 单文件运行：`python -m unittest tests.test_stage3_graphs`（pytest 风格：`python -m pytest tests/test_stage3_graphs.py -p no:cacheprovider -v`）。
 
 ## VSCode 调试
 
