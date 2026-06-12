@@ -1,7 +1,7 @@
 """Anthropic-compatible LLM clients (debate + judge).
 
 合并自原 agent/deepseek_client.py 与 judge/deepseek_judge_client.py,为
-DeepSeek、MiniMax 等所有走 Anthropic Messages 兼容协议的 provider 提供
+DeepSeek 等走 Anthropic Messages 兼容协议的 provider 提供
 共享 HTTP 层。每个 provider 只需要写一层 ~10 行的"薄配置"。
 
 API key 加载优先级(每一项依次尝试):
@@ -44,17 +44,6 @@ from config import (
     DEEPSEEK_TEMPERATURE,
     DEEPSEEK_THINKING_TYPE,
     DEEPSEEK_TIMEOUT_SECONDS,
-    MINIMAX_ANTHROPIC_BASE_URL,
-    MINIMAX_ANTHROPIC_VERSION,
-    MINIMAX_API_KEY_ENV,
-    MINIMAX_CACHE_DIR,
-    MINIMAX_CACHE_ENABLED,
-    MINIMAX_FALLBACK_API_KEY_ENV,
-    MINIMAX_HTTP_RETRIES,
-    MINIMAX_MAX_TOKENS,
-    MINIMAX_MODEL,
-    MINIMAX_TEMPERATURE,
-    MINIMAX_TIMEOUT_SECONDS,
     PROJECT_ROOT,
 )
 from data.schema import CommentBlock, datetime_to_str
@@ -474,63 +463,6 @@ class DeepSeekJudgeClient(AnthropicCompatibleJudgeClient):
         )
 
 
-# =============================================================================
-# Provider 薄配置:MiniMax
-# =============================================================================
-
-
-class MiniMaxAnthropicDebateClient(AnthropicCompatibleDebateClient):
-    """MiniMax Anthropic-compatible 协议辩论 client(薄配置)。
-
-    quickstart 示例(https://platform.minimax.io/docs/token-plan/quickstart)
-    没出现 ``thinking`` 字段,所以默认 ``include_thinking=False``,payload 不
-    构造该字段;如果后续发现 provider 支持 thinking,可改回 True。
-    """
-
-    def __init__(
-        self,
-        api_key: str | None = None,
-        transport: Transport | None = None,
-        **overrides: Any,
-    ):
-        super().__init__(
-            api_key=api_key,
-            base_url=MINIMAX_ANTHROPIC_BASE_URL,
-            model=MINIMAX_MODEL,
-            max_tokens=MINIMAX_MAX_TOKENS,
-            temperature=MINIMAX_TEMPERATURE,
-            anthropic_version=MINIMAX_ANTHROPIC_VERSION,
-            include_thinking=False,
-            thinking_type="disabled",
-            timeout_seconds=MINIMAX_TIMEOUT_SECONDS,
-            http_retries=MINIMAX_HTTP_RETRIES,
-            cache_enabled=MINIMAX_CACHE_ENABLED,
-            cache_dir=MINIMAX_CACHE_DIR,
-            api_key_env=MINIMAX_API_KEY_ENV,
-            fallback_api_key_env=MINIMAX_FALLBACK_API_KEY_ENV,
-            transport=transport,
-            **overrides,
-        )
-
-
-class MiniMaxJudgeClient(AnthropicCompatibleJudgeClient):
-    """MiniMax 法官 client(薄配置)。"""
-
-    def __init__(
-        self,
-        transport: Transport | None = None,
-        **overrides: Any,
-    ):
-        super().__init__(
-            http_client=MiniMaxAnthropicDebateClient(transport=transport, **overrides)
-        )
-
-
-# =============================================================================
-# 模块级 helper(prompt 拼装、响应解析、缓存、env 加载)
-# =============================================================================
-
-
 def _build_user_prompt(
     block: CommentBlock,
     profiles: dict[str, UserProfile],
@@ -601,6 +533,11 @@ def _phase_instructions(phase: str) -> str:
     instructions = {
         "initial_argument": (
             "Generate an independent opening argument. Do not target previous arguments."
+        ),
+        "rebuttal": (
+            "Generate a concise targeted rebuttal. Use only target ids from available_target_ids, "
+            "answer the opponent's latest claim directly, and ground the response in supplied text "
+            "or time-safe profile signals."
         ),
         "intra_reflection": (
             "Act as the camp's reflection agent. Read same-camp opening arguments, point out "

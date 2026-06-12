@@ -43,7 +43,7 @@ class FakeDebateClient:
             ],
             confidence=0.62 if camp == "bear" else 0.58,
             targets=targets,
-            cited_comment_ids=[root.comment_id],
+            cited_comment_ids=[],
             round=round_index,
             seq=seq,
             phase=phase,

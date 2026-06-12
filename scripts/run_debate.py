@@ -1,4 +1,4 @@
-﻿"""Run offline debates for v2 CommentBlock samples."""
+"""Run offline debates for v2 CommentBlock samples."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def run_debate_pipeline(
     limit_posts: int | None = None,
     limit_blocks: int | None = None,
     rounds: int = DEFAULT_DEBATE_ROUNDS,
-    mode: str = "minimax",
+    mode: str = "siliconflow",
     client: DebateClient | None = None,
 ) -> list[dict[str, object]]:
     posts = load_posts(input_path)
@@ -58,7 +58,7 @@ def main() -> None:
     parser.add_argument("--limit-posts", type=int, default=None)
     parser.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    parser.add_argument("--mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    parser.add_argument("--mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--output-jsonl", type=str, default=None)
     args = parser.parse_args()
 

@@ -36,17 +36,17 @@ class StageThreeGraphTest(unittest.TestCase):
         nodes, edges = build_debate_graph(transcript)
         relations = {edge.relation for edge in edges}
 
-        self.assertEqual(len(nodes), 60)
-        self.assertIn("cite", relations)
-        self.assertIn("attack", relations)
+        self.assertEqual(len(nodes), 4)
         self.assertIn("respond", relations)
+        self.assertNotIn("cite", relations)
+        self.assertNotIn("attack", relations)
+        self.assertNotIn("support", relations)
+        self.assertNotIn("propose", relations)
         self.assertNotIn("precede", relations)
-        self.assertIn("support", relations)
-        self.assertIn("propose", relations)
         self.assertTrue(all("phase" in node.attrs for node in nodes))
         self.assertTrue(all("relative_time" in node.attrs for node in nodes))
-        self.assertTrue(all(edge.source.startswith("argument:") for edge in edges if edge.relation != "cite"))
-        self.assertTrue(any(edge.target == f"comment:{block.root_comment.comment_id}" for edge in edges))
+        self.assertTrue(all(edge.source.startswith("argument:") for edge in edges))
+        self.assertTrue(all(edge.target.startswith("argument:") for edge in edges))
 
     def test_hetero_graph_fuses_comment_and_debate_nodes(self):
         block, transcript = _fixture_block_and_transcript(rounds=1)
@@ -55,8 +55,9 @@ class StageThreeGraphTest(unittest.TestCase):
 
         self.assertEqual(graph.graph_id, block.block_id)
         self.assertEqual(graph.node_counts()["comment"], 1)
-        self.assertEqual(graph.node_counts()["argument"], 30)
-        self.assertIn("cite", graph.relation_counts())
+        self.assertEqual(graph.node_counts()["argument"], 2)
+        self.assertIn("respond", graph.relation_counts())
+        self.assertNotIn("cite", graph.relation_counts())
 
     def test_normalized_relation_adjacency_rows_sum_to_one(self):
         block, transcript = _fixture_block_and_transcript(rounds=1)
@@ -84,7 +85,7 @@ class StageThreeGraphTest(unittest.TestCase):
         self.assertEqual(graph["graph_id"], "p1:c1")
         self.assertIn("normalized_adjacency", records[0])
         self.assertGreater(len(graph["nodes"]), 1)
-        self.assertGreater(len(graph["edges"]), 1)
+        self.assertGreater(len(graph["edges"]), 0)
 
 
 def _fixture_block_and_transcript(rounds: int) -> tuple[CommentBlock, DebateTranscript]:

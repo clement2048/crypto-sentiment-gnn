@@ -1,7 +1,7 @@
 """把 HeteroGraph 转成 PyTorch 张量。
 
-- 节点 -> 固定 8 维特征矩阵 x（8个辩手之间的讨论）
-- 多关系边 -> 每种关系一个邻接矩阵（辩论的讨论）
+- 节点 -> 固定 8 维结构特征矩阵 x
+- 关系边 -> 每种关系一个邻接矩阵（当前主要是 reply/respond）
 """
 
 from __future__ import annotations
@@ -91,6 +91,5 @@ def _to_float(value) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
-
 
 

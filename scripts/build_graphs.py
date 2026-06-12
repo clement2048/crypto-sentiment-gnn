@@ -1,4 +1,4 @@
-﻿"""Build heterogeneous graphs from comment blocks and online debates."""
+"""Build heterogeneous graphs from comment blocks and online debates."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def build_graph_records(
     input_path: str,
     limit_blocks: int | None = DEFAULT_LIMIT_BLOCKS,
     rounds: int = DEFAULT_DEBATE_ROUNDS,
-    mode: str = "minimax",
+    mode: str = "siliconflow",
     client: DebateClient | None = None,
 ) -> list[dict[str, object]]:
     debate_records = run_debate_pipeline(
@@ -60,7 +60,7 @@ def main() -> None:
     parser.add_argument("--input", default=DEFAULT_INPUT, help="JSONL file, directory, or glob pattern.")
     parser.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    parser.add_argument("--mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    parser.add_argument("--mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--output-jsonl", type=str, default=None)
     args = parser.parse_args()
 

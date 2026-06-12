@@ -1,4 +1,4 @@
-﻿"""Train a tiny graph sentiment prototype on debate graphs."""
+"""Train a tiny graph sentiment prototype on debate graphs."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def build_training_tensors(
     input_path: str,
     limit_blocks: int | None = TRAIN_PROTOTYPE_LIMIT_BLOCKS,
     rounds: int = DEFAULT_DEBATE_ROUNDS,
-    mode: str = "minimax",
+    mode: str = "siliconflow",
     client: DebateClient | None = None,
 ) -> list[GraphTensor]:
     posts = load_posts(input_path)
@@ -48,7 +48,7 @@ def train_prototype(
     rounds: int = DEFAULT_DEBATE_ROUNDS,
     epochs: int = TRAIN_PROTOTYPE_EPOCHS,
     learning_rate: float = LEARNING_RATE,
-    mode: str = "minimax",
+    mode: str = "siliconflow",
     client: DebateClient | None = None,
 ) -> dict[str, float]:
     tensors = build_training_tensors(
@@ -94,7 +94,7 @@ def main() -> None:
     parser.add_argument("--input", default=DEFAULT_INPUT)
     parser.add_argument("--limit-blocks", type=int, default=TRAIN_PROTOTYPE_LIMIT_BLOCKS)
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    parser.add_argument("--mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    parser.add_argument("--mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--epochs", type=int, default=TRAIN_PROTOTYPE_EPOCHS)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
     args = parser.parse_args()

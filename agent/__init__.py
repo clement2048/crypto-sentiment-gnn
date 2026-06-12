@@ -3,8 +3,6 @@
 from agent.anthropic_compatible import (
     DeepSeekAnthropicDebateClient,
     DeepSeekJudgeClient,
-    MiniMaxAnthropicDebateClient,
-    MiniMaxJudgeClient,
 )
 from agent.client_factory import create_debate_client
 from agent.debate_orchestrator import DebateOrchestrator
@@ -25,10 +23,7 @@ __all__ = [
     "DeepSeekAnthropicDebateClient",
     "DeepSeekJudgeClient",
     "Evidence",
-    "MiniMaxAnthropicDebateClient",
-    "MiniMaxJudgeClient",
     "SiliconFlowJudgeClient",
     "SiliconFlowOpenAICompatibleDebateClient",
     "create_debate_client",
 ]
-

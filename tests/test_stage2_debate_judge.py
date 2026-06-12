@@ -143,7 +143,7 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
         transcript = DebateOrchestrator(client=FakeDebateClient()).run(block, profiles, rounds=2)
 
         self.assertEqual(transcript.block_id, block.block_id)
-        self.assertEqual(len(transcript.arguments), 60)
+        self.assertEqual(len(transcript.arguments), 4)
         self.assertEqual(transcript.arguments[0].argument_id, "p1:c1:r1:s1:bull")
         for argument in transcript.arguments:
             self.assertTrue(argument.argument_id)
@@ -153,7 +153,7 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
             self.assertGreaterEqual(argument.confidence, 0.0)
             self.assertLessEqual(argument.confidence, 1.0)
 
-    def test_orchestrator_uses_paper_roles_by_default(self):
+    def test_orchestrator_uses_one_bull_and_one_bear_agent_by_default(self):
         block, profiles = _load_first_block_and_profiles()
 
         transcript = DebateOrchestrator(client=FakeDebateClient()).run(block, profiles, rounds=1)
@@ -161,54 +161,15 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
         self.assertEqual(
             [argument.role for argument in transcript.arguments],
             [
-                "technical_analysis_agent",
-                "fundamental_analysis_agent",
-                "sentiment_contagion_agent",
-                "risk_analysis_agent",
-                "onchain_skeptic_agent",
-                "sentiment_reversal_agent",
-                "reflection_agent",
-                "technical_analysis_agent",
-                "fundamental_analysis_agent",
-                "sentiment_contagion_agent",
-                "reflection_agent",
-                "risk_analysis_agent",
-                "onchain_skeptic_agent",
-                "sentiment_reversal_agent",
-                "technical_analysis_agent",
-                "fundamental_analysis_agent",
-                "sentiment_contagion_agent",
-                "risk_analysis_agent",
-                "onchain_skeptic_agent",
-                "sentiment_reversal_agent",
-                "reflection_agent",
-                "technical_analysis_agent",
-                "fundamental_analysis_agent",
-                "sentiment_contagion_agent",
-                "reflection_agent",
-                "risk_analysis_agent",
-                "onchain_skeptic_agent",
-                "sentiment_reversal_agent",
-                "reflection_agent",
-                "reflection_agent",
+                "bull_agent",
+                "bear_agent",
             ],
         )
         self.assertEqual(
             [argument.phase for argument in transcript.arguments],
-            ["initial_argument"] * 6
-            + ["intra_reflection"] * 1
-            + ["intra_response"] * 3
-            + ["intra_reflection"] * 1
-            + ["intra_response"] * 3
-            + ["cross_response"] * 6
-            + ["counter_reflection"] * 1
-            + ["counter_rebuttal"] * 3
-            + ["counter_reflection"] * 1
-            + ["counter_rebuttal"] * 3
-            + ["reflection_summary"] * 2,
+            ["initial_argument", "rebuttal"],
         )
-        self.assertTrue(_phase_targets_reflection(transcript.arguments, "intra_response", "intra_reflection"))
-        self.assertTrue(_phase_targets_reflection(transcript.arguments, "counter_rebuttal", "counter_reflection"))
+        self.assertEqual(transcript.arguments[1].targets, [transcript.arguments[0].argument_id])
 
     def test_fake_judge_output_and_consistency(self):
         block, profiles = _load_first_block_and_profiles()
@@ -440,7 +401,7 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
         self.assertIn("profiles", records[0])
         self.assertIn("debate", records[0])
         self.assertNotIn("judge", records[0])
-        self.assertEqual(len(records[0]["debate"]["arguments"]), 30)
+        self.assertEqual(len(records[0]["debate"]["arguments"]), 2)
 
     def test_deepseek_client_uses_anthropic_payload_and_parses_argument(self):
         block, profiles = _load_first_block_and_profiles()
@@ -449,7 +410,7 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
             self.assertEqual(payload["model"], "deepseek-v4-pro")
             self.assertEqual(payload["thinking"], {"type": "disabled"})
             self.assertIn("system", payload)
-            self.assertIn("Technical Analysis Agent", payload["system"])
+            self.assertIn("Bull Agent", payload["system"])
             self.assertEqual(payload["messages"][0]["role"], "user")
             user_text = payload["messages"][0]["content"][0]["text"]
             self.assertIn("required_metadata", user_text)
@@ -701,19 +662,6 @@ def _evaluation_record(true_label: int, verdict: str) -> dict[str, object]:
         "block": {"block_id": "p1:c1", "label": true_label},
         "judge": {"verdict": verdict, "confidence": 0.7},
     }
-
-
-def _phase_targets_reflection(arguments, response_phase: str, reflection_phase: str) -> bool:
-    reflection_ids_by_camp = {
-        argument.camp: argument.argument_id
-        for argument in arguments
-        if argument.phase == reflection_phase
-    }
-    responses = [argument for argument in arguments if argument.phase == response_phase]
-    return bool(responses) and all(
-        reflection_ids_by_camp.get(argument.camp) in argument.targets
-        for argument in responses
-    )
 
 
 if __name__ == "__main__":

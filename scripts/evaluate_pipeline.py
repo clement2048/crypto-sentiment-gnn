@@ -1,4 +1,4 @@
-﻿"""Evaluate full pipeline predictions against root-comment labels.
+"""Evaluate full pipeline predictions against root-comment labels.
 
 当前评估把 CommentBlock.label 当作真实方向：
 - 1 表示看涨
@@ -77,8 +77,8 @@ def evaluate_pipeline(
     rounds: int = DEFAULT_DEBATE_ROUNDS,
     train_epochs: int = FULL_PIPELINE_TRAIN_EPOCHS,
     learning_rate: float = LEARNING_RATE,
-    debate_mode: str = "minimax",
-    judge_mode: str = "minimax",
+    debate_mode: str = "siliconflow",
+    judge_mode: str = "siliconflow",
     debate_client: DebateClient | None = None,
     judge_client: object | None = None,
 ) -> tuple[list[dict[str, object]], EvaluationMetrics]:
@@ -144,8 +144,8 @@ def main() -> None:
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     parser.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
-    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--output-jsonl", type=str, default=None)
     parser.add_argument("--metrics-json", type=str, default=None)
     args = parser.parse_args()

@@ -1,4 +1,4 @@
-﻿"""Run and render a readable DeepSeek debate case study."""
+"""Run and render a readable DeepSeek debate case study."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def run_case_study(
     max_blocks: int | None = None,
     rounds: int = 1,
     debate_mode: str = "deepseek",
-    judge_mode: str = "minimax",
+    judge_mode: str = "siliconflow",
     seed: int = 42,
     debate_client: DebateClient | None = None,
     judge_client: object | None = None,
@@ -117,8 +117,8 @@ def main() -> None:
     parser.add_argument("--block-id", default=None)
     parser.add_argument("--max-blocks", type=int, default=None)
     parser.add_argument("--rounds", type=int, default=1)
-    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="deepseek")
-    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="deepseek")
+    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-json", default=None)
     parser.add_argument("--output-md", default=None)

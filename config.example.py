@@ -77,14 +77,8 @@ PRICE_TIE_COUNTS_AS_BULLISH = True
 # 辩论流程
 # -----------------------------
 
-# 默认辩论轮数：每轮 bull/bear 阵营各角色发言。
+# 默认辩论轮数：每轮 bull_agent 和 bear_agent 各发言一次。
 DEFAULT_DEBATE_ROUNDS = 2
-
-# 每轮辩论中，阵营内“reflection -> 核心 agent 回应”的讨论次数。
-DEFAULT_INTRA_DISCUSSION_ROUNDS = 1
-
-# 每轮跨阵营攻击后，阵营内“reflection 消化攻击 -> 核心 agent 再反驳”的次数。
-DEFAULT_COUNTER_DISCUSSION_ROUNDS = 1
 
 
 # -----------------------------
@@ -105,30 +99,6 @@ DEEPSEEK_ANTHROPIC_VERSION = "2023-06-01"
 DEEPSEEK_CACHE_ENABLED = True
 DEEPSEEK_CACHE_DIR = PROJECT_ROOT / "outputs" / "llm_cache" / "deepseek"
 
-
-# -----------------------------
-# MiniMax Anthropic 兼容接口
-# (https://platform.minimax.io/docs/token-plan/quickstart)
-# 与官方 anthropic SDK 共用 ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY；
-# 备用别名 MINIMAX_API_KEY，便于本地直接命名。
-# -----------------------------
-
-MINIMAX_ANTHROPIC_BASE_URL = "https://api.minimax.io/anthropic"
-MINIMAX_MODEL = "MiniMax-M3"
-MINIMAX_API_KEY_ENV = os.getenv("ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")
-MINIMAX_FALLBACK_API_KEY_ENV = "MINIMAX_API_KEY"
-MINIMAX_MAX_TOKENS = 1000
-MINIMAX_TEMPERATURE = 0.2
-MINIMAX_TIMEOUT_SECONDS = 120.0
-MINIMAX_HTTP_RETRIES = 3
-MINIMAX_ANTHROPIC_VERSION = "2023-06-01"
-MINIMAX_CACHE_ENABLED = True
-MINIMAX_CACHE_DIR = PROJECT_ROOT / "outputs" / "llm_cache" / "minimax"
-
-
-# -----------------------------
-# 阿里云百炼 OpenAI 兼容接口
-# -----------------------------
 
 BAILIAN_OPENAI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 BAILIAN_MODEL = "deepseek-v4-flash"
@@ -176,7 +146,7 @@ DEBATE_SEQUENCE_SCALE = 100.0
 # 图模型 / Bi-ODE 原型
 # -----------------------------
 
-DEFAULT_RELATIONS = ["reply", "cite", "support", "attack", "respond", "propose"]
+DEFAULT_RELATIONS = ["reply", "respond"]
 
 MODEL_HIDDEN_DIM = 16
 CALIBRATOR_HIDDEN_DIM = 32

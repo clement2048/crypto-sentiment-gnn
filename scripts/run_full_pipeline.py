@@ -1,4 +1,4 @@
-﻿"""运行符合 v2 文档顺序的完整原型流程。
+"""运行符合 v2 文档顺序的完整原型流程。
 
 顺序是：
 CommentBlock -> Profile -> Debate -> HeteroGraph -> ModelSummary -> JudgeOutput
@@ -49,8 +49,8 @@ def run_full_pipeline(
     rounds: int = DEFAULT_DEBATE_ROUNDS,
     train_epochs: int = FULL_PIPELINE_TRAIN_EPOCHS,
     learning_rate: float = LEARNING_RATE,
-    debate_mode: str = "minimax",
-    judge_mode: str = "minimax",
+    debate_mode: str = "siliconflow",
+    judge_mode: str = "siliconflow",
     debate_client: DebateClient | None = None,
     judge_client: object | None = None,
 ) -> list[dict[str, object]]:
@@ -100,8 +100,8 @@ def main() -> None:
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     parser.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
-    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--output-jsonl", type=str, default=None)
     args = parser.parse_args()
 

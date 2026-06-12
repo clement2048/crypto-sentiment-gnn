@@ -1,4 +1,4 @@
-﻿"""Run a small chronological train/val/test experiment."""
+"""Run a small chronological train/val/test experiment."""
 
 from __future__ import annotations
 
@@ -43,8 +43,8 @@ def run_split_experiment(
     rounds: int = DEFAULT_DEBATE_ROUNDS,
     epochs: int = 5,
     learning_rate: float = LEARNING_RATE,
-    debate_mode: str = "minimax",
-    judge_mode: str = "minimax",
+    debate_mode: str = "siliconflow",
+    judge_mode: str = "siliconflow",
     seed: int = 42,
     debate_client: DebateClient | None = None,
     judge_client: object | None = None,
@@ -136,8 +136,8 @@ def main() -> None:
     parser.add_argument("--rounds", type=int, default=1)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
-    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "minimax", "siliconflow"], default="minimax")
+    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-json", type=str, default=None)
     args = parser.parse_args()
