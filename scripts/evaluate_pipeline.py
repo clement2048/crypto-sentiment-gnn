@@ -1,16 +1,10 @@
-"""Evaluate full pipeline predictions against root-comment labels.
-
-当前评估把 CommentBlock.label 当作真实方向：
-- 1 表示看涨
-- -1 表示看跌
-
-法官输出的 BULLISH/BEARISH 会映射回 1/-1；NEUTRAL 作为中立/弃权预测单独统计。
-"""
+"""Evaluate binary BULLISH/BEARISH predictions against root-comment labels."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +18,6 @@ from scripts.run_full_pipeline import run_full_pipeline
 
 LABEL_BULLISH = 1
 LABEL_BEARISH = -1
-LABEL_NEUTRAL = 0
 
 
 @dataclass
@@ -47,27 +40,31 @@ class ClassMetrics:
 class EvaluationMetrics:
     total: int
     accuracy: float
-    directional_accuracy: float | None
-    coverage: float
     macro_precision: float
     macro_recall: float
     macro_f1: float
     bullish: ClassMetrics
     bearish: ClassMetrics
     confusion_matrix: dict[str, dict[str, int]]
+    brier: float
+    ece: float
+    msed: float | None
+    correlation: float | None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "total": self.total,
             "accuracy": self.accuracy,
-            "directional_accuracy": self.directional_accuracy,
-            "coverage": self.coverage,
             "macro_precision": self.macro_precision,
             "macro_recall": self.macro_recall,
             "macro_f1": self.macro_f1,
             "bullish": self.bullish.to_dict(),
             "bearish": self.bearish.to_dict(),
             "confusion_matrix": self.confusion_matrix,
+            "brier": self.brier,
+            "ece": self.ece,
+            "msed": self.msed,
+            "correlation": self.correlation,
         }
 
 
@@ -82,7 +79,6 @@ def evaluate_pipeline(
     debate_client: DebateClient | None = None,
     judge_client: object | None = None,
 ) -> tuple[list[dict[str, object]], EvaluationMetrics]:
-    """运行完整 pipeline，并计算最终法官 verdict 相对真实 label 的指标。"""
     records = run_full_pipeline(
         input_path=input_path,
         limit_blocks=limit_blocks,
@@ -94,17 +90,14 @@ def evaluate_pipeline(
         debate_client=debate_client,
         judge_client=judge_client,
     )
-    metrics = compute_metrics(records)
-    return records, metrics
+    return records, compute_metrics(records)
 
 
 def compute_metrics(records: list[dict[str, object]]) -> EvaluationMetrics:
-    """计算 accuracy、precision、recall、F1 和混淆矩阵。"""
+    """Compute binary accuracy, macro-F1, confusion matrix, and calibration metrics."""
     pairs = [(_true_label(record), _predicted_label(record)) for record in records]
     total = len(pairs)
     correct = sum(1 for truth, pred in pairs if truth == pred)
-    non_neutral = [(truth, pred) for truth, pred in pairs if pred != LABEL_NEUTRAL]
-    directional_correct = sum(1 for truth, pred in non_neutral if truth == pred)
 
     bullish = _class_metrics(pairs, LABEL_BULLISH)
     bearish = _class_metrics(pairs, LABEL_BEARISH)
@@ -112,31 +105,33 @@ def compute_metrics(records: list[dict[str, object]]) -> EvaluationMetrics:
     macro_recall = (bullish.recall + bearish.recall) / 2.0
     macro_f1 = (bullish.f1 + bearish.f1) / 2.0
 
+    confidences = [_confidence(record) for record in records]
+    correctness = [1.0 if truth == pred else 0.0 for truth, pred in pairs]
+    probs = [_bullish_probability(record) for record in records]
+    truth_binary = [1.0 if truth == LABEL_BULLISH else 0.0 for truth, _pred in pairs]
+
     return EvaluationMetrics(
         total=total,
         accuracy=_safe_div(correct, total),
-        directional_accuracy=(
-            _safe_div(directional_correct, len(non_neutral))
-            if non_neutral
-            else None
-        ),
-        coverage=_safe_div(len(non_neutral), total),
         macro_precision=macro_precision,
         macro_recall=macro_recall,
         macro_f1=macro_f1,
         bullish=bullish,
         bearish=bearish,
         confusion_matrix=_confusion_matrix(pairs),
+        brier=_brier(probs, truth_binary),
+        ece=_ece(confidences, correctness),
+        msed=_msed(probs, truth_binary),
+        correlation=_correlation(probs, truth_binary),
     )
 
 
 def main() -> None:
-    """命令行入口：默认对全部 CommentBlock 做评估。"""
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(
-        description="Evaluate full pipeline predictions against CommentBlock labels.",
+        description="Evaluate binary full-pipeline predictions against CommentBlock labels.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--input", default=DEFAULT_INPUT)
@@ -180,11 +175,6 @@ def main() -> None:
 def _print_metrics(metrics: EvaluationMetrics) -> None:
     print(f"Evaluated samples: {metrics.total}")
     print(f"Accuracy: {metrics.accuracy:.4f}")
-    print(f"Coverage(non-neutral): {metrics.coverage:.4f}")
-    if metrics.directional_accuracy is None:
-        print("Directional accuracy(non-neutral only): N/A")
-    else:
-        print(f"Directional accuracy(non-neutral only): {metrics.directional_accuracy:.4f}")
     print(
         "Macro: "
         f"precision={metrics.macro_precision:.4f} "
@@ -206,6 +196,12 @@ def _print_metrics(metrics: EvaluationMetrics) -> None:
         f"support={metrics.bearish.support}"
     )
     print(f"Confusion matrix: {metrics.confusion_matrix}")
+    print(f"Brier: {metrics.brier:.4f}")
+    print(f"ECE: {metrics.ece:.4f}")
+    if metrics.msed is not None:
+        print(f"MSED: {metrics.msed:.4f}")
+    if metrics.correlation is not None:
+        print(f"Correlation: {metrics.correlation:.4f}")
 
 
 def _class_metrics(pairs: list[tuple[int, int]], label: int) -> ClassMetrics:
@@ -223,16 +219,15 @@ def _confusion_matrix(pairs: list[tuple[int, int]]) -> dict[str, dict[str, int]]
     names = {
         LABEL_BULLISH: "bullish",
         LABEL_BEARISH: "bearish",
-        LABEL_NEUTRAL: "neutral",
     }
     matrix = {
-        "bullish": {"bullish": 0, "bearish": 0, "neutral": 0},
-        "bearish": {"bullish": 0, "bearish": 0, "neutral": 0},
+        "bullish": {"bullish": 0, "bearish": 0},
+        "bearish": {"bullish": 0, "bearish": 0},
     }
     for truth, pred in pairs:
         true_name = names.get(truth)
-        pred_name = names.get(pred, "neutral")
-        if true_name in matrix:
+        pred_name = names.get(pred)
+        if true_name in matrix and pred_name in matrix[true_name]:
             matrix[true_name][pred_name] += 1
     return matrix
 
@@ -256,9 +251,79 @@ def _predicted_label(record: dict[str, object]) -> int:
         return LABEL_BULLISH
     if verdict == "BEARISH":
         return LABEL_BEARISH
-    if verdict == "NEUTRAL":
-        return LABEL_NEUTRAL
-    raise ValueError(f"Unsupported judge verdict for evaluation: {verdict}")
+    raise ValueError(f"Unsupported binary judge verdict for evaluation: {verdict}")
+
+
+def _confidence(record: dict[str, object]) -> float:
+    judge = record.get("judge", {})
+    if isinstance(judge, dict):
+        try:
+            return float(judge.get("confidence", 0.0))
+        except (TypeError, ValueError):
+            return 0.0
+    return 0.0
+
+
+def _bullish_probability(record: dict[str, object]) -> float:
+    model_summary = record.get("model_summary", {})
+    if isinstance(model_summary, dict):
+        try:
+            return float(model_summary.get("bullish_probability", 0.5))
+        except (TypeError, ValueError):
+            return 0.5
+    judge = record.get("judge", {})
+    if isinstance(judge, dict):
+        verdict = str(judge.get("verdict", "")).upper()
+        confidence = _confidence(record)
+        if verdict == "BULLISH":
+            return confidence
+        if verdict == "BEARISH":
+            return 1.0 - confidence
+    return 0.5
+
+
+def _brier(probs: list[float], truth: list[float]) -> float:
+    return _safe_div(sum((p - y) ** 2 for p, y in zip(probs, truth)), len(probs))
+
+
+def _msed(probs: list[float], truth: list[float]) -> float | None:
+    if not probs:
+        return None
+    return _brier(probs, truth)
+
+
+def _ece(confidences: list[float], correctness: list[float], bins: int = 10) -> float:
+    if not confidences:
+        return 0.0
+    total = len(confidences)
+    error = 0.0
+    for idx in range(bins):
+        lower = idx / bins
+        upper = (idx + 1) / bins
+        selected = [
+            (conf, corr)
+            for conf, corr in zip(confidences, correctness)
+            if (lower <= conf < upper) or (idx == bins - 1 and conf == upper)
+        ]
+        if not selected:
+            continue
+        avg_conf = sum(item[0] for item in selected) / len(selected)
+        avg_acc = sum(item[1] for item in selected) / len(selected)
+        error += (len(selected) / total) * abs(avg_acc - avg_conf)
+    return error
+
+
+def _correlation(xs: list[float], ys: list[float]) -> float | None:
+    if len(xs) < 2:
+        return None
+    mean_x = sum(xs) / len(xs)
+    mean_y = sum(ys) / len(ys)
+    numerator = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    denom_x = math.sqrt(sum((x - mean_x) ** 2 for x in xs))
+    denom_y = math.sqrt(sum((y - mean_y) ** 2 for y in ys))
+    if denom_x == 0 or denom_y == 0:
+        return None
+    return numerator / (denom_x * denom_y)
 
 
 def _safe_div(numerator: float, denominator: float) -> float:
@@ -283,5 +348,3 @@ def _write_json(path: str, data: dict[str, Any]) -> None:
 
 if __name__ == "__main__":
     main()
-
-

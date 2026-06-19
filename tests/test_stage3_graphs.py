@@ -19,16 +19,16 @@ FIXTURE = Path(__file__).parent / "fixtures" / "sample_post.jsonl"
 
 
 class StageThreeGraphTest(unittest.TestCase):
-    def test_comment_graph_contains_reply_edges(self):
+    def test_comment_graph_stores_parent_id_without_reply_edges(self):
         block = _block_with_reply()
 
         nodes, edges = build_comment_graph(block)
 
         self.assertEqual(len(nodes), 2)
-        self.assertEqual(len(edges), 1)
-        self.assertEqual(edges[0].relation, "reply")
-        self.assertEqual(edges[0].source, "comment:r1")
-        self.assertEqual(edges[0].target, "comment:c1")
+        self.assertEqual(len(edges), 0)
+        by_ref = {node.ref_id: node for node in nodes}
+        self.assertIsNone(by_ref["c1"].attrs["parent_id"])
+        self.assertEqual(by_ref["r1"].attrs["parent_id"], "c1")
 
     def test_debate_graph_relations(self):
         block, transcript = _fixture_block_and_transcript(rounds=2)
@@ -37,14 +37,14 @@ class StageThreeGraphTest(unittest.TestCase):
         relations = {edge.relation for edge in edges}
 
         self.assertEqual(len(nodes), 4)
-        self.assertIn("respond", relations)
+        self.assertEqual(relations, {"interact"})
         self.assertNotIn("cite", relations)
         self.assertNotIn("attack", relations)
         self.assertNotIn("support", relations)
         self.assertNotIn("propose", relations)
         self.assertNotIn("precede", relations)
         self.assertTrue(all("phase" in node.attrs for node in nodes))
-        self.assertTrue(all("relative_time" in node.attrs for node in nodes))
+        self.assertTrue(all("t_index" in node.attrs for node in nodes))
         self.assertTrue(all(edge.source.startswith("argument:") for edge in edges))
         self.assertTrue(all(edge.target.startswith("argument:") for edge in edges))
 
@@ -56,21 +56,17 @@ class StageThreeGraphTest(unittest.TestCase):
         self.assertEqual(graph.graph_id, block.block_id)
         self.assertEqual(graph.node_counts()["comment"], 1)
         self.assertEqual(graph.node_counts()["argument"], 2)
-        self.assertIn("respond", graph.relation_counts())
+        self.assertIn("interact", graph.relation_counts())
         self.assertNotIn("cite", graph.relation_counts())
 
-    def test_normalized_relation_adjacency_rows_sum_to_one(self):
+    def test_normalized_relation_adjacency_contains_laplacian_diagonal(self):
         block, transcript = _fixture_block_and_transcript(rounds=1)
         graph = build_hetero_graph(block, transcript)
 
         normalized = normalized_relation_adjacency(graph)
 
-        for triples in normalized.values():
-            row_sums: dict[int, float] = {}
-            for source, _target, weight in triples:
-                row_sums[source] = row_sums.get(source, 0.0) + weight
-            for value in row_sums.values():
-                self.assertAlmostEqual(value, 1.0)
+        triples = normalized["interact"]
+        self.assertTrue(any(source == target and weight > 0 for source, target, weight in triples))
 
     def test_build_graph_records_smoke(self):
         records = build_graph_records(

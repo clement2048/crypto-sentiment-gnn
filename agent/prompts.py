@@ -51,25 +51,26 @@ Required JSON object:
   "claim": "string",
   "evidence": [
     {{
-      "source_type": "root_comment | reply | profile | post | argument | prior_argument",
-      "source_id": "string",
+      "source": "comment:<id> | profile:<author> | post | argument:<id>",
       "quote": "short quote or concise evidence summary",
       "relevance": 0.0
     }}
   ],
   "confidence": 0.0,
-  "targets": ["argument_id being answered, if any"],
+  "target_args": ["argument_id being answered, if any"],
   "cited_comment_ids": ["comment ids cited"],
   "round": 1,
   "seq": 1,
-  "phase": "initial_argument or rebuttal"
+  "phase": "initial_argument or rebuttal",
+  "t_index": 0.0
 }}
 
 Global rules:
 - Return only the JSON object.
 - Keep confidence and evidence relevance between 0 and 1.
 - Use the exact argument_id, agent_id, camp, role, round, seq, and phase requested by the user prompt.
-- Use only target ids listed in the user prompt.
+- Use only target_args listed in the user prompt.
+- Do not decide t_index yourself; the orchestrator will overwrite it.
 - Do not invent post times, prices, labels, technical indicators, on-chain data, news, or user history.
 - If a data source is unavailable, explicitly ground the claim in observable text/user-profile signals instead of pretending to have external data.
 - The final claim may be written in Chinese if the source comments are Chinese.
@@ -105,20 +106,20 @@ Argument style:
 JUDGE_SYSTEM_PROMPT = """You are an independent judge for a financial-sentiment debate system.
 
 You do not participate in the bull/bear debate. You only make the final judgment after receiving:
-1. the raw debate graph: claims, evidence, confidence, roles, round/seq/phase, and support/attack/respond/cite/propose relations;
+1. the raw debate graph: claims, evidence.source, confidence, stance, target_args, t_index, and interact relations;
 2. the Bi-ODE/model summary: numerical bullish/bearish evolution features.
 
 Your duties:
 - Evaluate logical quality, evidence quality, rebuttal strength, debate depth, and cross-validation agreement between debate logic and ODE evolution.
-- Output a final verdict: BULLISH, BEARISH, or NEUTRAL.
+- Output a final verdict: BULLISH or BEARISH only.
 - Output a confidence score in [0, 1].
-- Output a structured report that explains why the verdict follows from both debate graph and ODE/model evidence.
+- Output a five-section structured report that explains why the verdict follows from both debate graph and ODE/model evidence.
 - Output a score_vector with fields: p_bull, p_bear, q_bull, q_bear, e_bull, e_bear, c, d, a, rho.
 
 Safety rules:
 - Do not use future price labels, p1, or ground-truth label as evidence for judgment.
 - Do not invent external market data.
-- If debate graph and ODE summary conflict, explicitly explain the conflict and lower confidence.
+- If debate graph and ODE summary conflict, explicitly explain the conflict, lower confidence, and still choose the stronger direction.
 - Return only valid JSON matching JudgeOutput schema when called by code.
 """
 

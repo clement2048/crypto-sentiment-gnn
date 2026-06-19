@@ -1,19 +1,19 @@
-# 情绪分析系统 v2 原型
+# Crypto Sentiment GNN Prototype
 
-加密货币舆情二分类原型：从 Binance Square JSONL 数据构建根评论级样本，经时间安全用户画像、正反双 agent 辩论、异构图、BDG-ODE 图模型和在线 Judge，输出 `BULLISH / BEARISH / NEUTRAL` 判决。
+加密货币舆情二分类原型：从 Binance Square JSONL 数据构造根评论级样本，经过时间安全用户画像、正反方双 agent 辩论、单关系辩论图、Bi-ODE 图模型、在线 Judge 与市场方向验证，输出 `BULLISH / BEARISH` 判决。
 
 ## 项目结构
 
 ```text
-agent/          正方/反方双 agent 辩论与 LLM provider
+agent/          正方 / 反方 agent、反思信号、LLM provider
 data/           JSONL 加载、过滤、CommentBlock 构建
-dataset/        默认数据集 final.jsonl
-debate_graph/   评论 reply 图、论点 respond 图、图张量化
-judge/          Judge schema、parser、在线 Judge provider
-model/          BDG-ODE 图情绪模型
+debate_graph/   评论节点、interact 辩论图、图张量化
+judge/          Judge schema、prompt、parser、provider
+model/          Bi-ODE 图情绪模型与训练损失接口
 profiles/       时间安全用户画像
-scripts/        分阶段脚本
+scripts/        分阶段运行、评估、导出脚本
 tests/          单元测试
+verification/   市场价格方向与活动强度验证
 main.py         统一命令行入口
 ```
 
@@ -23,15 +23,10 @@ main.py         统一命令行入口
 
 ```bash
 "D:/anaconda/envs/sentiment/python.exe" main.py blocks
-```
-
-测试推荐：
-
-```bash
 "D:/anaconda/envs/sentiment/python.exe" -m unittest discover -s tests
 ```
 
-系统默认 `python` 可能没有安装 `torch`，直接运行可能失败。
+系统默认 `python` 可能没有安装 `torch`。
 
 ## 数据流
 
@@ -40,22 +35,23 @@ dataset/final.jsonl
   -> data.build_comment_blocks
   -> profiles.ProfileStore.get_profiles_for_block  # 严格 t < t0
   -> agent.DebateOrchestrator                      # bull_agent / bear_agent
-  -> debate_graph.build_hetero_graph               # reply / respond
-  -> model.GraphSentimentModel
+  -> debate_graph.build_hetero_graph               # single interact relation
+  -> model.GraphSentimentModel                     # Bi-ODE + polarity seed
   -> judge.create_judge_client(...).judge(...)
+  -> verification.verify_market_behavior
 ```
 
-默认输入是 `dataset/final.jsonl`，所有主命令都可用 `--input` 覆盖。
+默认输入是 `dataset/final.jsonl`，主命令可用 `--input` 覆盖。
 
 ## 运行
 
 ```bash
 python main.py blocks
-python main.py debate --limit-blocks 1 --rounds 1 --mode siliconflow
-python main.py graphs --limit-blocks 1 --rounds 1 --mode siliconflow
-python main.py full --limit-blocks 1 --rounds 1 --debate-mode siliconflow --judge-mode siliconflow
-python main.py evaluate --rounds 1 --debate-mode siliconflow --judge-mode siliconflow
-python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 1 --epochs 5 --debate-mode siliconflow --judge-mode siliconflow
+python main.py debate --limit-blocks 1 --rounds 4 --mode siliconflow
+python main.py graphs --limit-blocks 1 --rounds 4 --mode siliconflow
+python main.py full --limit-blocks 1 --rounds 4 --debate-mode siliconflow --judge-mode siliconflow
+python main.py evaluate --rounds 4 --debate-mode siliconflow --judge-mode siliconflow
+python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 4 --epochs 5 --debate-mode siliconflow --judge-mode siliconflow
 ```
 
 可选 provider：
@@ -79,24 +75,26 @@ SILICONFLOW_API_KEY=
 SILICONFLOW_MODEL=
 ```
 
-常用临时设置示例：
+PowerShell 临时设置示例：
 
 ```powershell
-$env:ANTHROPIC_API_KEY="..."
 $env:SILICONFLOW_API_KEY="..."
 ```
 
 ## 核心约束
 
-- 监督标签是 `CommentBlock.label`：`1` 看涨，`-1` 看跌。
-- 用户画像和 Agent 输入必须遵守时间边界 `t < t0`。
+- 主监督标签是根评论级 `CommentBlock.label`：`1` 看涨，`-1` 看跌。
+- 用户画像、Agent 输入、Judge 输入必须满足时间边界 `t < t0`。
 - `p1`、未来价格、真实标签不能传给 LLM Agent / Judge。
-- 市场价格方向只能用于构造或验证标签，不能作为模型直接监督。
-- LLM Agent / LLM Judge 不可微，不能把 Judge 输出直接塞进 `loss.backward()`。
+- 价格方向只用于标签构造或事后验证，不能作为模型直接输入。
+- 交易量变化只表示活动强度，不决定方向标签。
+- LLM Agent / LLM Judge 不可微，不能把 Judge 输出直接接入 `loss.backward()`。
 
 ## 当前图结构
 
-评论图保留真实评论树的 `reply` 边。辩论图只保留论点之间的 `respond` 边；引用材料保存在 agent 输出文本和 `evidence` 字段中，不再生成 `cite` 边。
+评论结构不再生成 `reply` 边；父子关系保存在评论节点 `attrs.parent_id`。
+
+辩论图只保留一种关系：`interact`。agent 引用内容保存在论点文本与 `evidence.source` 字段中，不生成 `cite` 边。论点回应目标使用 `target_args`，时间顺序使用 `t_index`。
 
 ## 测试
 
@@ -105,4 +103,4 @@ python -m unittest discover -s tests
 python -m pytest tests -p no:cacheprovider
 ```
 
-`pytest` 可选；当前环境优先使用 `unittest`。
+当前优先使用 `unittest`。

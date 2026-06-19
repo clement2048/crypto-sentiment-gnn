@@ -102,7 +102,7 @@ def label_name(value: Any) -> str:
         return "BULLISH"
     if value == -1:
         return "BEARISH"
-    return "NEUTRAL"
+    return "UNKNOWN"
 
 
 def verdict_matches_label(verdict: Any, label: Any) -> bool:
@@ -130,7 +130,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       --line: #d8dde6;
       --bull: #13795b;
       --bear: #b42318;
-      --neutral: #5f6b7a;
+      --muted-badge: #5f6b7a;
       --accent: #2458d3;
       --soft-bull: #e7f6ef;
       --soft-bear: #fdebea;
@@ -176,7 +176,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     }
     .badge.bull { color: var(--bull); background: var(--soft-bull); border-color: #abdcc7; }
     .badge.bear { color: var(--bear); background: var(--soft-bear); border-color: #f4b4ae; }
-    .badge.neutral { color: var(--neutral); background: #eef1f5; border-color: var(--line); }
+    .badge.muted { color: var(--muted-badge); background: #eef1f5; border-color: var(--line); }
     .badge.ok { color: #05603a; background: #ecfdf3; }
     .badge.bad { color: #b42318; background: #fef3f2; }
     .detail { display: grid; gap: 16px; }
@@ -206,6 +206,11 @@ HTML_TEMPLATE = r"""<!doctype html>
     summary { cursor: pointer; color: var(--accent); font-weight: 700; font-size: 13px; }
     .evidence { margin: 8px 0 0; padding: 8px; border-radius: 6px; background: #f7f8fb; }
     .evidence small { color: var(--muted); display: block; margin-bottom: 4px; }
+    .target {
+      margin: 8px 0 0; padding: 8px; border-radius: 6px; background: #fff8e6;
+      border: 1px solid #f1d28a;
+    }
+    .target small { color: var(--muted); display: block; margin-bottom: 4px; }
     .empty { padding: 24px; color: var(--muted); text-align: center; }
     @media (max-width: 980px) {
       main.wrap { grid-template-columns: 1fr; }
@@ -257,7 +262,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     const fmt = (value, digits = 3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "n/a";
     const pct = (value) => Number.isFinite(Number(value)) ? `${Math.round(Number(value) * 100)}%` : "n/a";
     const esc = (value) => String(value ?? "").replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-    const verdictClass = (value) => String(value).toLowerCase().includes("bull") ? "bull" : String(value).toLowerCase().includes("bear") ? "bear" : "neutral";
+    const verdictClass = (value) => String(value).toLowerCase().includes("bull") ? "bull" : String(value).toLowerCase().includes("bear") ? "bear" : "muted";
 
     function init() {
       $("source").textContent = `${DATA.source} · ${DATA.totals.records} blocks · ${DATA.totals.arguments} arguments`;
@@ -308,7 +313,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       $("recordList").innerHTML = state.filtered.map((rec, idx) => `
         <button class="record-button ${rec === state.selected ? "active" : ""}" data-idx="${idx}">
           <div class="row">
-            <span class="badge neutral">${esc(rec.split)} #${rec.index}</span>
+            <span class="badge muted">${esc(rec.split)} #${rec.index}</span>
             <span class="badge ${rec.is_correct ? "ok" : "bad"}">${rec.is_correct ? "OK" : "MISS"}</span>
           </div>
           <div class="id" style="margin-top:7px">${esc(rec.block_id)}</div>
@@ -343,9 +348,9 @@ HTML_TEMPLATE = r"""<!doctype html>
             <span class="badge ${rec.is_correct ? "ok" : "bad"}">真实 ${esc(rec.true_label)} / 预测 ${esc(rec.pred_label)}</span>
           </div>
           <div class="meta">
-            <span class="badge neutral">p0 ${esc(rec.p0)}</span>
-            <span class="badge neutral">p1 ${esc(rec.p1)}</span>
-            <span class="badge neutral">${esc(rec.rounds)} round</span>
+            <span class="badge muted">p0 ${esc(rec.p0)}</span>
+            <span class="badge muted">p1 ${esc(rec.p1)}</span>
+            <span class="badge muted">${esc(rec.rounds)} round</span>
             <span class="badge bull">bull ${rec.camp_counts.bull}</span>
             <span class="badge bear">bear ${rec.camp_counts.bear}</span>
           </div>
@@ -354,13 +359,13 @@ HTML_TEMPLATE = r"""<!doctype html>
         </div>
         <div class="grid-3">
           ${miniPanel("裁判结论", `
-            <div class="meta"><span class="badge ${verdictClass(judge.verdict)}">${esc(judge.verdict)}</span><span class="badge neutral">confidence ${fmt(judge.confidence)}</span></div>
+            <div class="meta"><span class="badge ${verdictClass(judge.verdict)}">${esc(judge.verdict)}</span><span class="badge muted">confidence ${fmt(judge.confidence)}</span></div>
             <div class="text-block">${esc(judge.report)}</div>
           `)}
           ${miniPanel("模型信号", `
             ${scoreBar("bull prob", model.bullish_probability, "bull")}
             ${scoreBar("margin", (Number(model.bull_bear_margin) + 1) / 2, Number(model.bull_bear_margin) >= 0 ? "bull" : "bear", fmt(model.bull_bear_margin))}
-            <div class="sub">predicted_label: ${esc(model.predicted_label)} · ode_steps: ${esc(model.ode_steps)}</div>
+            <div class="sub">ode_steps: ${esc(model.ode_steps)}</div>
           `)}
           ${miniPanel("裁判分数", Object.entries(scores).map(([k, v]) => scoreBar(k, v, k.includes("bear") ? "bear" : k.includes("bull") ? "bull" : "", fmt(v))).join(""))}
         </div>
@@ -387,17 +392,29 @@ HTML_TEMPLATE = r"""<!doctype html>
       const args = rec.arguments.filter(arg => arg.camp === camp);
       return `<div>
         <div class="lane-title"><span>${title}</span><span class="badge ${camp}">${args.length}</span></div>
-        ${args.map(argCard).join("")}
+        ${args.map(arg => argCard(rec, arg)).join("")}
       </div>`;
     }
 
-    function argCard(arg) {
+    function argCard(rec, arg) {
       const evidence = (arg.evidence || []).map(ev => `
         <div class="evidence">
           <small>${esc(ev.source_type)} · ${esc(ev.source_id)} · relevance ${fmt(ev.relevance)}</small>
           ${esc(ev.quote)}
         </div>
       `).join("");
+      const targetIds = arg.target_args || arg.targets || [];
+      const byId = new Map((rec.arguments || []).map(item => [item.argument_id, item]));
+      const targets = targetIds.map(id => {
+        const target = byId.get(id);
+        if (!target) {
+          return `<div class="target"><small>target_arg ${esc(id)}</small>未在当前样本中找到对应发言</div>`;
+        }
+        return `<div class="target">
+          <small>回应 ${esc(target.camp)} · round ${esc(target.round)} · #${esc(target.seq)} · ${esc(target.argument_id)}</small>
+          ${esc(target.claim)}
+        </div>`;
+      }).join("");
       return `<article class="arg-card ${esc(arg.camp)}">
         <div class="arg-head">
           <div><div class="role">#${esc(arg.seq)} ${esc(arg.role)}</div><div class="sub">${esc(arg.agent_id)}</div></div>
@@ -405,7 +422,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         </div>
         <div class="claim">${esc(arg.claim)}</div>
         <details>
-          <summary>证据 ${arg.evidence?.length || 0} 条 · targets ${arg.targets?.length || 0}</summary>
+          <summary>证据 ${arg.evidence?.length || 0} 条 · target_args ${(arg.target_args || arg.targets || []).length || 0}</summary>
+          ${targets || `<div class="target">没有回应/反驳的上一条发言</div>`}
           ${evidence || `<div class="evidence">没有证据条目</div>`}
         </details>
       </article>`;

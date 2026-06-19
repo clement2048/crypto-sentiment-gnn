@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "E:\code\crypto-sentiment-gnn\main.py", line 20, in <module>
+    from scripts.build_graphs import build_graph_records
+  File "E:\code\crypto-sentiment-gnn\scripts\build_graphs.py", line 13, in <module>
+    from debate_graph import build_hetero_graph
+  File "E:\code\crypto-sentiment-gnn\debate_graph\__init__.py", line 6, in <module>
+    from debate_graph.graph_batch import GraphTensor, graph_to_tensor
+  File "E:\code\crypto-sentiment-gnn\debate_graph\graph_batch.py", line 12, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'

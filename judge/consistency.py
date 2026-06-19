@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from config import NEUTRAL_SCORE_IMBALANCE_THRESHOLD, PROBABILITY_MAX, PROBABILITY_MIN
+from config import PROBABILITY_MAX, PROBABILITY_MIN
 from judge.judge_schema import JudgeOutput
 
 
@@ -20,8 +20,6 @@ def check_judge_consistency(output: JudgeOutput) -> list[str]:
         flags.append("verdict_score_direction_mismatch")
     if output.verdict == "BEARISH" and scores.p_bear < scores.p_bull:
         flags.append("verdict_score_direction_mismatch")
-    if output.verdict == "NEUTRAL" and abs(scores.p_bull - scores.p_bear) > NEUTRAL_SCORE_IMBALANCE_THRESHOLD:
-        flags.append("neutral_score_imbalance")
     return flags
 
 

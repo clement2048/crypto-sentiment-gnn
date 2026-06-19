@@ -79,6 +79,46 @@ def integrate_bdg_ode(
     raise ValueError(f"Unsupported ODE_SOLVER_BACKEND: {backend}")
 
 
+def integrate_bdg_ode_path(
+    func: BDGODEFunc,
+    bull0: torch.Tensor,
+    bear0: torch.Tensor,
+    relation_adjs: dict[str, torch.Tensor],
+    steps: int = ODE_STEPS,
+    step_size: float = EULER_STEP_SIZE,
+    terminal_time: float = ODE_TERMINAL_TIME,
+    method: str = ODE_METHOD,
+    rtol: float = ODE_RTOL,
+    atol: float = ODE_ATOL,
+    use_adjoint: bool = ODE_USE_ADJOINT,
+    backend: str = ODE_SOLVER_BACKEND,
+) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
+    """Integrate BDG-ODE and return terminal states plus all sampled states."""
+    if backend == "torchdiffeq":
+        return torchdiffeq_integrate_path(
+            func=func,
+            bull0=bull0,
+            bear0=bear0,
+            relation_adjs=relation_adjs,
+            steps=steps,
+            terminal_time=terminal_time,
+            method=method,
+            rtol=rtol,
+            atol=atol,
+            use_adjoint=use_adjoint,
+        )
+    if backend == "manual_euler":
+        return euler_integrate_path(
+            func=func,
+            bull0=bull0,
+            bear0=bear0,
+            relation_adjs=relation_adjs,
+            steps=steps,
+            step_size=step_size,
+        )
+    raise ValueError(f"Unsupported ODE_SOLVER_BACKEND: {backend}")
+
+
 def torchdiffeq_integrate(
     func: BDGODEFunc,
     bull0: torch.Tensor,
@@ -120,6 +160,47 @@ def torchdiffeq_integrate(
     return bull_path[-1], bear_path[-1]
 
 
+def torchdiffeq_integrate_path(
+    func: BDGODEFunc,
+    bull0: torch.Tensor,
+    bear0: torch.Tensor,
+    relation_adjs: dict[str, torch.Tensor],
+    steps: int = ODE_STEPS,
+    terminal_time: float = ODE_TERMINAL_TIME,
+    method: str = ODE_METHOD,
+    rtol: float = ODE_RTOL,
+    atol: float = ODE_ATOL,
+    use_adjoint: bool = ODE_USE_ADJOINT,
+) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
+    """Use torchdiffeq and keep every sampled state for auxiliary losses."""
+    try:
+        from torchdiffeq import odeint, odeint_adjoint
+    except ImportError as exc:
+        raise ImportError("torchdiffeq is required when ODE_SOLVER_BACKEND='torchdiffeq'") from exc
+
+    if steps < 1:
+        raise ValueError("ODE_STEPS must be >= 1")
+
+    wrapped = _TorchDiffEqWrapper(func, relation_adjs)
+    integration_time = torch.linspace(
+        0.0,
+        terminal_time,
+        steps + 1,
+        device=bull0.device,
+        dtype=bull0.dtype,
+    )
+    solver = odeint_adjoint if use_adjoint else odeint
+    bull_path, bear_path = solver(
+        wrapped,
+        (bull0, bear0),
+        integration_time,
+        rtol=rtol,
+        atol=atol,
+        method=method,
+    )
+    return bull_path[-1], bear_path[-1], list(bull_path), list(bear_path)
+
+
 def euler_integrate(
     func: BDGODEFunc,
     bull0: torch.Tensor,
@@ -135,6 +216,27 @@ def euler_integrate(
         bull = bull + step_size * d_bull
         bear = bear + step_size * d_bear
     return bull, bear
+
+
+def euler_integrate_path(
+    func: BDGODEFunc,
+    bull0: torch.Tensor,
+    bear0: torch.Tensor,
+    relation_adjs: dict[str, torch.Tensor],
+    steps: int = ODE_STEPS,
+    step_size: float = EULER_STEP_SIZE,
+) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
+    """Manual Euler integration with sampled path retention."""
+    bull, bear = bull0, bear0
+    bull_path = [bull]
+    bear_path = [bear]
+    for _ in range(steps):
+        d_bull, d_bear = func(bull, bear, relation_adjs)
+        bull = bull + step_size * d_bull
+        bear = bear + step_size * d_bear
+        bull_path.append(bull)
+        bear_path.append(bear)
+    return bull, bear, bull_path, bear_path
 
 
 

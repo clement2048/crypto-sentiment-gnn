@@ -30,14 +30,10 @@ def export_metrics_csv(input_json: str, output_csv: str) -> Path:
         "macro_precision",
         "macro_recall",
         "macro_f1",
-        "coverage",
-        "directional_accuracy",
         "confusion_bullish_as_bullish",
         "confusion_bullish_as_bearish",
-        "confusion_bullish_as_neutral",
         "confusion_bearish_as_bullish",
         "confusion_bearish_as_bearish",
-        "confusion_bearish_as_neutral",
     ]
     with output_path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -90,14 +86,10 @@ def _metric_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
                     "macro_precision": split_metrics.get("macro_precision"),
                     "macro_recall": split_metrics.get("macro_recall"),
                     "macro_f1": split_metrics.get("macro_f1"),
-                    "coverage": split_metrics.get("coverage"),
-                    "directional_accuracy": split_metrics.get("directional_accuracy"),
                     "confusion_bullish_as_bullish": bull_row.get("bullish"),
                     "confusion_bullish_as_bearish": bull_row.get("bearish"),
-                    "confusion_bullish_as_neutral": bull_row.get("neutral"),
                     "confusion_bearish_as_bullish": bear_row.get("bullish"),
                     "confusion_bearish_as_bearish": bear_row.get("bearish"),
-                    "confusion_bearish_as_neutral": bear_row.get("neutral"),
                 }
             )
     return rows

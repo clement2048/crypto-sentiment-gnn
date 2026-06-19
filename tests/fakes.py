@@ -35,18 +35,20 @@ class FakeDebateClient:
             claim=f"[{phase}] {direction} test argument for {block.product or 'asset'}: {root.text[:48]}",
             evidence=[
                 Evidence(
-                    source_type="root_comment",
-                    source_id=root.comment_id,
+                    source=f"comment:{root.comment_id}",
                     quote=root.text[:120],
                     relevance=0.8,
+                    source_type="root_comment",
+                    source_id=root.comment_id,
                 )
             ],
             confidence=0.62 if camp == "bear" else 0.58,
-            targets=targets,
+            target_args=targets,
             cited_comment_ids=[],
             round=round_index,
             seq=seq,
             phase=phase,
+            t_index=float(round_index - 1) + float(seq - 1) / 2.0,
         )
 
 

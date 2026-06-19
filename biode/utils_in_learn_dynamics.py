@@ -1,4 +1,4 @@
-import os
+﻿import os
 import numpy as np
 import scipy.sparse as sp
 import torch
@@ -31,49 +31,49 @@ def just_calculate_infection_ratio(A, true_y):
     negative_infection_ratio_list = []
     positive_infection_ratio_list = []
 
-    for day in range(num_days):  # 从第一天开始计算
-        # 在每天开始时重置 already_infected_users
+    for day in range(num_days):  # 浠庣涓€澶╁紑濮嬭绠?
+        # 鍦ㄦ瘡澶╁紑濮嬫椂閲嶇疆 already_infected_users
         already_infected_users = set()
 
-        # 找到当天观点为负的用户
+        # 鎵惧埌褰撳ぉ瑙傜偣涓鸿礋鐨勭敤鎴?
         negative_users = torch.where(true_y[:, day] == -1)[0]
-        # 找到当天观点为正的用户
+        # 鎵惧埌褰撳ぉ瑙傜偣涓烘鐨勭敤鎴?
         positive_users = torch.where(true_y[:, day] == 1)[0]
 
-        # 找到与这些观点为负的用户相连的所有其他用户
+        # 鎵惧埌涓庤繖浜涜鐐逛负璐熺殑鐢ㄦ埛鐩歌繛鐨勬墍鏈夊叾浠栫敤鎴?
         possible_negative_infected_users = torch.where(torch.sum(A[negative_users, :], dim=0) > 0)[0]
-        # 找到与这些观点为正的用户相连的所有其他用户
+        # 鎵惧埌涓庤繖浜涜鐐逛负姝ｇ殑鐢ㄦ埛鐩歌繛鐨勬墍鏈夊叾浠栫敤鎴?
         possible_positive_infected_users = torch.where(torch.sum(A[positive_users, :], dim=0) > 0)[0]
 
-        # 初始化 real_negative_infected_users 和 real_positive_infected_users
+        # 鍒濆鍖?real_negative_infected_users 鍜?real_positive_infected_users
         real_negative_infected_users = torch.tensor([], dtype=torch.long)
         real_positive_infected_users = torch.tensor([], dtype=torch.long)
 
-        # 在可能负感染者中找到那些在前一天观点为0在当天转变为-1的用户
+        # 鍦ㄥ彲鑳借礋鎰熸煋鑰呬腑鎵惧埌閭ｄ簺鍦ㄥ墠涓€澶╄鐐逛负0鍦ㄥ綋澶╄浆鍙樹负-1鐨勭敤鎴?
         if day > 0:
-            neutral_users_previous_day = torch.where(true_y[:, day - 1] != -1)[0]
+            eligible_users_previous_day = torch.where(true_y[:, day - 1] != -1)[0]
             possible_negative_infected_users = torch.tensor(list(
-                set(neutral_users_previous_day.tolist()).intersection(set(possible_negative_infected_users.tolist()))))
+                set(eligible_users_previous_day.tolist()).intersection(set(possible_negative_infected_users.tolist()))))
             real_negative_infected_users = torch.tensor(list(
                 set(possible_negative_infected_users.tolist()).intersection(
                     set(torch.where(true_y[:, day] == -1)[0].tolist()))))
             real_negative_infected_users = torch.tensor(
-                list(set(real_negative_infected_users.tolist()).difference(already_infected_users)))  # 排除已经被感染的用户
-            already_infected_users.update(real_negative_infected_users.tolist())  # 更新已经被感染的用户列表
+                list(set(real_negative_infected_users.tolist()).difference(already_infected_users)))  # 鎺掗櫎宸茬粡琚劅鏌撶殑鐢ㄦ埛
+            already_infected_users.update(real_negative_infected_users.tolist())  # 鏇存柊宸茬粡琚劅鏌撶殑鐢ㄦ埛鍒楄〃
 
-        # 在可能正感染者中找到那些在前一天观点为0在当天转变为1的用户
+        # 鍦ㄥ彲鑳芥鎰熸煋鑰呬腑鎵惧埌閭ｄ簺鍦ㄥ墠涓€澶╄鐐逛负0鍦ㄥ綋澶╄浆鍙樹负1鐨勭敤鎴?
         if day > 0:
-            neutral_users_previous_day = torch.where(true_y[:, day - 1] != 1)[0]
+            eligible_users_previous_day = torch.where(true_y[:, day - 1] != 1)[0]
             possible_positive_infected_users = torch.tensor(list(
-                set(neutral_users_previous_day.tolist()).intersection(set(possible_positive_infected_users.tolist()))))
+                set(eligible_users_previous_day.tolist()).intersection(set(possible_positive_infected_users.tolist()))))
             real_positive_infected_users = torch.tensor(list(
                 set(possible_positive_infected_users.tolist()).intersection(
                     set(torch.where(true_y[:, day] == 1)[0].tolist()))))
             real_positive_infected_users = torch.tensor(
-                list(set(real_positive_infected_users.tolist()).difference(already_infected_users)))  # 排除已经被感染的用户
-            already_infected_users.update(real_positive_infected_users.tolist())  # 更新已经被感染的用户列表
+                list(set(real_positive_infected_users.tolist()).difference(already_infected_users)))  # 鎺掗櫎宸茬粡琚劅鏌撶殑鐢ㄦ埛
+            already_infected_users.update(real_positive_infected_users.tolist())  # 鏇存柊宸茬粡琚劅鏌撶殑鐢ㄦ埛鍒楄〃
 
-        # 计算每天的‘真实负感染者’数量和‘真实正感染者’数量
+        # 璁＄畻姣忓ぉ鐨勨€樼湡瀹炶礋鎰熸煋鑰呪€欐暟閲忓拰鈥樼湡瀹炴鎰熸煋鑰呪€欐暟閲?
         if (len(possible_negative_infected_users) != 0):
             negative_infection_ratio = len(real_negative_infected_users) / len(possible_negative_infected_users)
         else:
@@ -112,14 +112,14 @@ from scipy.stats import ttest_ind
 
 
 def plot_mean_attitude_changes_and_p_value(t_neg, t_pos, p_neg, p_pos, labels, xlabel, ylabel, color_scheme, show):
-    # 计算每个数组的平均值
-    # 排除每个数组的第一个元素
+    # 璁＄畻姣忎釜鏁扮粍鐨勫钩鍧囧€?
+    # 鎺掗櫎姣忎釜鏁扮粍鐨勭涓€涓厓绱?
     t_neg = np.array(t_neg[2:])
     t_pos = np.array(t_pos[2:])
     p_neg = np.array(p_neg[2:])
     p_pos = np.array(p_pos[2:])
 
-    # 计算每个数组的平均值
+    # 璁＄畻姣忎釜鏁扮粍鐨勫钩鍧囧€?
     t_neg_mean = np.mean(t_neg)
     t_pos_mean = np.mean(t_pos)
     p_neg_mean = np.mean(p_neg)
@@ -127,22 +127,22 @@ def plot_mean_attitude_changes_and_p_value(t_neg, t_pos, p_neg, p_pos, labels, x
 
     means = [t_neg_mean, t_pos_mean, p_neg_mean,p_pos_mean]
 
-    # 使用元素级除法计算比率数组，并避免除以零
+    # 浣跨敤鍏冪礌绾ч櫎娉曡绠楁瘮鐜囨暟缁勶紝骞堕伩鍏嶉櫎浠ラ浂
     ture_ratio = t_pos / (t_neg + 1e-10)
     pred_ratio = p_pos / (p_neg + 1e-10)
 
-    # 计算两个比率数组之间的P值
+    # 璁＄畻涓や釜姣旂巼鏁扮粍涔嬮棿鐨凱鍊?
     _, p_value = ttest_ind(ture_ratio, pred_ratio, equal_var=False)
 
-    # 绘制柱状图
+    # 缁樺埗鏌辩姸鍥?
     colors = ['green', 'orange', 'green', 'orange'] if color_scheme == 2 else ['gray'] * 4
-    plt.figure(figsize=(10, 6))  # 设置图的尺寸
+    plt.figure(figsize=(10, 6))  # 璁剧疆鍥剧殑灏哄
     plt.bar(labels, means, color=colors)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title('Average Number of People')
 
-    # 在图上标注P值
+    # 鍦ㄥ浘涓婃爣娉≒鍊?
     plt.text(0.5, max(means) * 0.95, f'P-value: {p_value:.2e}', horizontalalignment='center', fontsize=12)
 
     if show:

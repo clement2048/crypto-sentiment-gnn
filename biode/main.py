@@ -1,4 +1,4 @@
-import argparse
+﻿import argparse
 import time
 import torch.optim as optim
 import datetime
@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 print = functools.partial(print, flush=True)
 
-parser = argparse.ArgumentParser('BDG—ODE')
+parser = argparse.ArgumentParser('BDG鈥擮DE')
 parser.add_argument('--method', type=str,
                     choices=['dopri5', 'adams', 'explicit_adams', 'fixed_adams','tsit5', 'euler', 'midpoint', 'rk4'],
                     default='euler')  # dopri5
@@ -61,7 +61,7 @@ if args.dump:
     makedirs(results_dir)
 
 
-#从数据集中读入数据
+#浠庢暟鎹泦涓鍏ユ暟鎹?
 dataset = args.dataset
 path = f'{dataset}/{dataset}/'
 recorded = np.load(path+'recorded.npy')
@@ -85,12 +85,12 @@ true_y = torch.from_numpy(true_y).float().to(device)
 
 true_y = true_y.unsqueeze(1)
 
-# 使用avg_pool1d对第二维进行平均池化
-# kernel_size为10，表示每10个元素进行一次平均
-# stride为10，表示滑动窗口的步长为10
+# 浣跨敤avg_pool1d瀵圭浜岀淮杩涜骞冲潎姹犲寲
+# kernel_size涓?0锛岃〃绀烘瘡10涓厓绱犺繘琛屼竴娆″钩鍧?
+# stride涓?0锛岃〃绀烘粦鍔ㄧ獥鍙ｇ殑姝ラ暱涓?0
 average_y = F.avg_pool1d(true_y, kernel_size=10, stride=10)
 
-# 将average_y的形状从[10000, 1, 50]变为[10000, 50]
+# 灏哸verage_y鐨勫舰鐘朵粠[10000, 1, 50]鍙樹负[10000, 50]
 average_y = average_y.squeeze(1)
 
 true_y1 = average_y
@@ -102,8 +102,8 @@ n = true_y.shape[0]
 dates = list(range(true_y1.shape[1]))
 
 
-#建立邻接矩阵A
-file_path = f'{dataset}/{dataset}\\edge_run50000.npy'  # 构建 file_path
+#寤虹珛閭绘帴鐭╅樀A
+file_path = f'{dataset}/{dataset}\\edge_run50000.npy'  # 鏋勫缓 file_path
 print(f'Using dataset: {dataset}')
 print(f'File path is set to: {file_path}')
 edges = np.load(file_path, allow_pickle=True)
@@ -122,41 +122,41 @@ def calculate_infection_ratio(A, true_y):
     negative_infection_ratio_list = []
     positive_infection_ratio_list = []
 
-    for day in range(num_days):  # 从第一天开始计算
-        # 在每天开始时重置 already_infected_users
+    for day in range(num_days):  # 浠庣涓€澶╁紑濮嬭绠?
+        # 鍦ㄦ瘡澶╁紑濮嬫椂閲嶇疆 already_infected_users
         already_infected_users = set()
 
-        # 找到当天观点为负的用户
+        # 鎵惧埌褰撳ぉ瑙傜偣涓鸿礋鐨勭敤鎴?
         negative_users = torch.where(true_y[:, day] == -1)[0]
-        # 找到当天观点为正的用户
+        # 鎵惧埌褰撳ぉ瑙傜偣涓烘鐨勭敤鎴?
         positive_users = torch.where(true_y[:, day] == 1)[0]
 
-        # 找到与这些观点为负的用户相连的所有其他用户
+        # 鎵惧埌涓庤繖浜涜鐐逛负璐熺殑鐢ㄦ埛鐩歌繛鐨勬墍鏈夊叾浠栫敤鎴?
         possible_negative_infected_users = torch.where(torch.sum(A[negative_users, :], dim=0) > 0)[0]
-        # 找到与这些观点为正的用户相连的所有其他用户
+        # 鎵惧埌涓庤繖浜涜鐐逛负姝ｇ殑鐢ㄦ埛鐩歌繛鐨勬墍鏈夊叾浠栫敤鎴?
         possible_positive_infected_users = torch.where(torch.sum(A[positive_users, :], dim=0) > 0)[0]
 
-        # 初始化 real_negative_infected_users 和 real_positive_infected_users
+        # 鍒濆鍖?real_negative_infected_users 鍜?real_positive_infected_users
         real_negative_infected_users = torch.tensor([], dtype=torch.long)
         real_positive_infected_users = torch.tensor([], dtype=torch.long)
 
-        # 在可能负感染者中找到那些在前一天观点为0在当天转变为-1的用户
+        # 鍦ㄥ彲鑳借礋鎰熸煋鑰呬腑鎵惧埌閭ｄ簺鍦ㄥ墠涓€澶╄鐐逛负0鍦ㄥ綋澶╄浆鍙樹负-1鐨勭敤鎴?
         if day > 0:
-            neutral_users_previous_day = torch.where(true_y[:, day-1] != -1)[0]
-            possible_negative_infected_users = torch.tensor(list(set(neutral_users_previous_day.tolist()).intersection(set(possible_negative_infected_users.tolist()))))
+            eligible_users_previous_day = torch.where(true_y[:, day-1] != -1)[0]
+            possible_negative_infected_users = torch.tensor(list(set(eligible_users_previous_day.tolist()).intersection(set(possible_negative_infected_users.tolist()))))
             real_negative_infected_users = torch.tensor(list(set(possible_negative_infected_users.tolist()).intersection(set(torch.where(true_y[:, day] == -1)[0].tolist()))))
-            real_negative_infected_users = torch.tensor(list(set(real_negative_infected_users.tolist()).difference(already_infected_users)))  # 排除已经被感染的用户
-            already_infected_users.update(real_negative_infected_users.tolist())  # 更新已经被感染的用户列表
+            real_negative_infected_users = torch.tensor(list(set(real_negative_infected_users.tolist()).difference(already_infected_users)))  # 鎺掗櫎宸茬粡琚劅鏌撶殑鐢ㄦ埛
+            already_infected_users.update(real_negative_infected_users.tolist())  # 鏇存柊宸茬粡琚劅鏌撶殑鐢ㄦ埛鍒楄〃
 
-        # 在可能正感染者中找到那些在前一天观点为0在当天转变为1的用户
+        # 鍦ㄥ彲鑳芥鎰熸煋鑰呬腑鎵惧埌閭ｄ簺鍦ㄥ墠涓€澶╄鐐逛负0鍦ㄥ綋澶╄浆鍙樹负1鐨勭敤鎴?
         if day > 0:
-            neutral_users_previous_day = torch.where(true_y[:, day-1] != 1)[0]
-            possible_positive_infected_users = torch.tensor(list(set(neutral_users_previous_day.tolist()).intersection(set(possible_positive_infected_users.tolist()))))
+            eligible_users_previous_day = torch.where(true_y[:, day-1] != 1)[0]
+            possible_positive_infected_users = torch.tensor(list(set(eligible_users_previous_day.tolist()).intersection(set(possible_positive_infected_users.tolist()))))
             real_positive_infected_users = torch.tensor(list(set(possible_positive_infected_users.tolist()).intersection(set(torch.where(true_y[:, day] == 1)[0].tolist()))))
-            real_positive_infected_users = torch.tensor(list(set(real_positive_infected_users.tolist()).difference(already_infected_users)))  # 排除已经被感染的用户
-            already_infected_users.update(real_positive_infected_users.tolist())  # 更新已经被感染的用户列表
+            real_positive_infected_users = torch.tensor(list(set(real_positive_infected_users.tolist()).difference(already_infected_users)))  # 鎺掗櫎宸茬粡琚劅鏌撶殑鐢ㄦ埛
+            already_infected_users.update(real_positive_infected_users.tolist())  # 鏇存柊宸茬粡琚劅鏌撶殑鐢ㄦ埛鍒楄〃
 
-        # 计算每天的‘真实负感染者’数量和‘真实正感染者’数量
+        # 璁＄畻姣忓ぉ鐨勨€樼湡瀹炶礋鎰熸煋鑰呪€欐暟閲忓拰鈥樼湡瀹炴鎰熸煋鑰呪€欐暟閲?
         if (len(possible_negative_infected_users) != 0):
             negative_infection_ratio = len(real_negative_infected_users) / len(possible_negative_infected_users)
         else:
@@ -179,7 +179,7 @@ print('Time tick: ', timetick)
 if args.sampled_time == 'irregular':
     id_test = list(range(timetick, int(true_y.shape[1])))  # last 20 beyond 100 for test (extrapolation)
     '''
-    注意一下id_test2的选取,分别对应两个不同的实验
+    娉ㄦ剰涓€涓媔d_test2鐨勯€夊彇,鍒嗗埆瀵瑰簲涓や釜涓嶅悓鐨勫疄楠?
     '''
     id_test2 = list(range(25, timetick))
     id_valid = list(range(20, 25))
@@ -344,28 +344,28 @@ if __name__ == '__main__':
             pred_y_train = pred_y[:, id_train]
             mask = (true_y_train != 0.0)
             '''
-            计算MSE损失
-            364-366行代码对应一种算法, 367行代码对应另一种算法
+            璁＄畻MSE鎹熷け
+            364-366琛屼唬鐮佸搴斾竴绉嶇畻娉? 367琛屼唬鐮佸搴斿彟涓€绉嶇畻娉?
             '''
             # true_y_non_zero = true_y_train[mask]
             # pred_y_non_zero = pred_y_train[mask]
             # loss_mse = criterion(pred_y_non_zero, true_y_non_zero)
             loss_mse = torch.matmul((criterion(pred_y_train, true_y_train, reduction='none') * mask).float(),change_users_per_day).sum().float()/mask.sum().float()
-            # 获取pred_y的前一列
+            # 鑾峰彇pred_y鐨勫墠涓€鍒?
             prev_column = torch.cat((x0, pred_y[:, :-1]), dim=1)
-            # 获取pred_y除了第一列的所有列
+            # 鑾峰彇pred_y闄や簡绗竴鍒楃殑鎵€鏈夊垪
             current_column = pred_y
             # prev_column = pred_y[:, :-1]
             # current_column = pred_y[:, 1:]
             difference = current_column - prev_column
-            # 计算正则化项
+            # 璁＄畻姝ｅ垯鍖栭」
 
             gradient_input = torch.autograd.grad(outputs=loss_mse, inputs=pred_y_train, grad_outputs=torch.ones_like(loss_mse), create_graph=True)[0]
             gradient_absolute = torch.abs(gradient_input)
             loss_derivative = gradient_absolute.pow(2).sum()
 
             '''
-            训练参数！
+            璁粌鍙傛暟锛?
             '''
             alpha = 1.0e-5
             beta = 2.5e-5
@@ -374,7 +374,7 @@ if __name__ == '__main__':
 
             regularization_term = alpha* loss_derivative +beta * difference.pow(2).sum()#/(n*difference.shape[1])
             
-            #约束pred_y1和pred_y2不能同时有值
+            #绾︽潫pred_y1鍜宲red_y2涓嶈兘鍚屾椂鏈夊€?
             loss_add = lambda1 * (pred_y1 * pred_y2).pow(2).sum()
 
             loss_x0 = delta * criterion(x0.squeeze(),true_y1[:,0])
@@ -445,12 +445,12 @@ if __name__ == '__main__':
                                   loss.item(), relative_loss.item(),
                                   time.time() - t_start))
                     
-                pred_binary = custom_sign(pred_y[:,id_train])  # 将预测值转换为二分类
-                pred_binary2 = custom_sign(pred_y[:, id_valid])  # 将预测值转换为二分类
-                pred_binary1 = custom_sign(pred_y[:, id_test])  # 将预测值转换为二分类
-                true_y_binary = true_y_train.int()  # 将真实值转换为二分类
+                pred_binary = custom_sign(pred_y[:,id_train])  # 灏嗛娴嬪€艰浆鎹负浜屽垎绫?
+                pred_binary2 = custom_sign(pred_y[:, id_valid])  # 灏嗛娴嬪€艰浆鎹负浜屽垎绫?
+                pred_binary1 = custom_sign(pred_y[:, id_test])  # 灏嗛娴嬪€艰浆鎹负浜屽垎绫?
+                true_y_binary = true_y_train.int()  # 灏嗙湡瀹炲€艰浆鎹负浜屽垎绫?
                 true_y_binary2 = true_y_valid.int()
-                true_y_binary1 = true_y_test.int()  # 将真实值转换为二分类
+                true_y_binary1 = true_y_test.int()  # 灏嗙湡瀹炲€艰浆鎹负浜屽垎绫?
 
                 mask = (true_y_binary != 0)
                 mask1 = (true_y_binary1 != 0)
@@ -468,26 +468,26 @@ if __name__ == '__main__':
                 accuracy2 = (masked_pred_binary2 == masked_true_y_binary2).float().mean().item()
 
                 if args.sampled_time == 'irregular':
-                    pred_binary2 = custom_sign(pred_y[:, id_test2])  # 将预测值转换为二分类
+                    pred_binary2 = custom_sign(pred_y[:, id_test2])  # 灏嗛娴嬪€艰浆鎹负浜屽垎绫?
                     true_y_binary2 = true_y_test2.int()
                     mask2 = (true_y_binary2 != 0)
                     masked_pred_binary2 = pred_binary2[mask2]
                     masked_true_y_binary2 = true_y_binary2[mask2]
-                    # 1. 拼接预测张量
+                    # 1. 鎷兼帴棰勬祴寮犻噺
                     pred = torch.cat((masked_pred_binary1, masked_pred_binary2), dim=0)
 
-                    # 2. 拼接真实标签张量
+                    # 2. 鎷兼帴鐪熷疄鏍囩寮犻噺
                     true_y_combine = torch.cat((masked_true_y_binary1, masked_true_y_binary2), dim=0)
 
-                    # 3. 计算准确率
+                    # 3. 璁＄畻鍑嗙‘鐜?
                     accuracy3 = (pred == true_y_combine).float().mean().item()
-                    # 4. 计算f1
+                    # 4. 璁＄畻f1
                     f1_out = compute_f1(pred, true_y_combine)
                     print('Model Accuracy: {:.6f} | Model f1 : {:.6f} | Train Accuracy : {:.6f}| Vaild Accuracy : {:.6f}'.format(accuracy3, f1_out,accuracy0, accuracy2))
                 else:
                     print('Model Accuracy: {:.6f} | Train Accuracy : {:.6f}'.format(accuracy3, accuracy0))
 
-                # 计算F1值
+                # 璁＄畻F1鍊?
 
                 f_1_1 = compute_f1(masked_pred_binary1, masked_true_y_binary1)
                 f_1_2 = compute_f1(masked_pred_binary2, masked_true_y_binary2)
@@ -495,7 +495,7 @@ if __name__ == '__main__':
                 f1_2_values.append(f_1_2)
                 iterations.append(itr)
 
-                # 早停
+                # 鏃╁仠
                 if accuracy2 >= best_validation_accuracy and accuracy0 >= best_train_accuracy:
                     best_train_accuracy = accuracy0
                     best_validation_accuracy = accuracy2
@@ -509,7 +509,7 @@ if __name__ == '__main__':
                         print('Early stopping at epoch: ', itr)
                         break
 
-        #绘制动图
+        #缁樺埗鍔ㄥ浘
         if itr % 5 == 0:
             with torch.no_grad():
                 pred_y1, pred_y2, x0 = model(t)
@@ -576,7 +576,7 @@ if __name__ == '__main__':
                 frame_files_combined.append(frame_name_combined)
 
 
-    # 使用生成的图像创建GIF
+    # 浣跨敤鐢熸垚鐨勫浘鍍忓垱寤篏IF
     with Image.open(frames1[0]) as img:
         img.save('animated_attitude_n-p.gif', save_all=True, append_images=[Image.open(f) for f in frames1[1:]], duration=300, loop=0)
 
@@ -595,7 +595,7 @@ if __name__ == '__main__':
     with Image.open(frames5[0]) as img:
         img.save('animated_combined.gif', save_all=True, append_images=[Image.open(f) for f in frames5[1:]], duration=300, loop=0)
 
-    #删除临时图像
+    #鍒犻櫎涓存椂鍥惧儚
     for frame_file in frames1:
         if os.path.exists(frame_file):
             os.remove(frame_file)
@@ -615,7 +615,7 @@ if __name__ == '__main__':
         if os.path.exists(frame_file):
             os.remove(frame_file)
 
-# 取出保存的最佳模型并计算准确率
+# 鍙栧嚭淇濆瓨鐨勬渶浣虫ā鍨嬪苟璁＄畻鍑嗙‘鐜?
     model.load_state_dict(torch.load(BEST_MODEL_PATH))
     with torch.no_grad():
         if flag_model_type == "continuous":
@@ -684,12 +684,12 @@ if __name__ == '__main__':
                             loss.item(), relative_loss.item(),
                             time.time() - t_start))
             
-        pred_binary = custom_sign(pred_y[:,id_train])  # 将预测值转换为二分类
-        pred_binary2 = custom_sign(pred_y[:, id_valid])  # 将预测值转换为二分类
-        pred_binary1 = custom_sign(pred_y[:, id_test])  # 将预测值转换为二分类
-        true_y_binary = true_y_train.int()  # 将真实值转换为二分类
+        pred_binary = custom_sign(pred_y[:,id_train])  # 灏嗛娴嬪€艰浆鎹负浜屽垎绫?
+        pred_binary2 = custom_sign(pred_y[:, id_valid])  # 灏嗛娴嬪€艰浆鎹负浜屽垎绫?
+        pred_binary1 = custom_sign(pred_y[:, id_test])  # 灏嗛娴嬪€艰浆鎹负浜屽垎绫?
+        true_y_binary = true_y_train.int()  # 灏嗙湡瀹炲€艰浆鎹负浜屽垎绫?
         true_y_binary2 = true_y_valid.int()
-        true_y_binary1 = true_y_test.int()  # 将真实值转换为二分类
+        true_y_binary1 = true_y_test.int()  # 灏嗙湡瀹炲€艰浆鎹负浜屽垎绫?
 
         mask = (true_y_binary != 0)
         mask1 = (true_y_binary1 != 0)
@@ -707,20 +707,20 @@ if __name__ == '__main__':
         accuracy2 = (masked_pred_binary2 == masked_true_y_binary2).float().mean().item()
 
         if args.sampled_time == 'irregular':
-            pred_binary2 = custom_sign(pred_y[:, id_test2])  # 将预测值转换为二分类
+            pred_binary2 = custom_sign(pred_y[:, id_test2])  # 灏嗛娴嬪€艰浆鎹负浜屽垎绫?
             true_y_binary2 = true_y_test2.int()
             mask2 = (true_y_binary2 != 0)
             masked_pred_binary2 = pred_binary2[mask2]
             masked_true_y_binary2 = true_y_binary2[mask2]
-            # 1. 拼接预测张量
+            # 1. 鎷兼帴棰勬祴寮犻噺
             pred = torch.cat((masked_pred_binary1, masked_pred_binary2), dim=0)
 
-            # 2. 拼接真实标签张量
+            # 2. 鎷兼帴鐪熷疄鏍囩寮犻噺
             true_y_combine = torch.cat((masked_true_y_binary1, masked_true_y_binary2), dim=0)
 
-            # 3. 计算准确率
+            # 3. 璁＄畻鍑嗙‘鐜?
             accuracy3 = (pred == true_y_combine).float().mean().item()
-            # 4. 计算f1
+            # 4. 璁＄畻f1
             f1_out = compute_f1(pred, true_y_combine)
             print('Model Accuracy: {:.6f} | Model f1 : {:.6f} | Train Accuracy : {:.6f}| Vaild Accuracy : {:.6f}'.format(accuracy3, f1_out,accuracy0, accuracy2))
         else:

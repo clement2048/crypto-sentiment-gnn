@@ -23,7 +23,7 @@ from judge.consistency import check_judge_consistency
 from judge.judge_parser import parse_judge_json
 from judge.judge_schema import JudgeOutput, JudgeScoreVector
 from model import GraphSentimentModel
-from config import BAILIAN_MODEL
+from config import BAILIAN_MODEL, NODE_FEATURE_DIM
 from profiles import ProfileStore
 from scripts.evaluate_pipeline import compute_metrics
 from scripts.run_debate import run_debate_pipeline
@@ -175,13 +175,13 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
         block, profiles = _load_first_block_and_profiles()
         transcript = DebateOrchestrator(client=FakeDebateClient()).run(block, profiles, rounds=1)
         graph = build_hetero_graph(block, transcript)
-        model_summary = GraphSentimentModel(input_dim=8, hidden_dim=8, ode_steps=1).summarize(
+        model_summary = GraphSentimentModel(input_dim=NODE_FEATURE_DIM, hidden_dim=8, ode_steps=1).summarize(
             graph_to_tensor(graph, label=block.label)
         )
 
         output = FakeJudgeClient().judge(transcript, model_summary, graph)
 
-        self.assertIn(output.verdict, ("BULLISH", "BEARISH", "NEUTRAL"))
+        self.assertIn(output.verdict, ("BULLISH", "BEARISH"))
         self.assertGreaterEqual(output.confidence, 0.0)
         self.assertLessEqual(output.confidence, 1.0)
         self.assertEqual(output.consistency_flags, check_judge_consistency(output))
@@ -227,7 +227,7 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
         block, profiles = _load_first_block_and_profiles()
         transcript = DebateOrchestrator(client=FakeDebateClient()).run(block, profiles, rounds=1)
         graph = build_hetero_graph(block, transcript)
-        model_summary = GraphSentimentModel(input_dim=8, hidden_dim=8, ode_steps=1).summarize(
+        model_summary = GraphSentimentModel(input_dim=NODE_FEATURE_DIM, hidden_dim=8, ode_steps=1).summarize(
             graph_to_tensor(graph, label=block.label)
         )
 
@@ -276,7 +276,7 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
         block, profiles = _load_first_block_and_profiles()
         transcript = DebateOrchestrator(client=FakeDebateClient()).run(block, profiles, rounds=1)
         graph = build_hetero_graph(block, transcript)
-        model_summary = GraphSentimentModel(input_dim=8, hidden_dim=8, ode_steps=1).summarize(
+        model_summary = GraphSentimentModel(input_dim=NODE_FEATURE_DIM, hidden_dim=8, ode_steps=1).summarize(
             graph_to_tensor(graph, label=block.label)
         )
 
@@ -326,7 +326,7 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
         block, profiles = _load_first_block_and_profiles()
         transcript = DebateOrchestrator(client=FakeDebateClient()).run(block, profiles, rounds=1)
         graph = build_hetero_graph(block, transcript)
-        model_summary = GraphSentimentModel(input_dim=8, hidden_dim=8, ode_steps=1).summarize(
+        model_summary = GraphSentimentModel(input_dim=NODE_FEATURE_DIM, hidden_dim=8, ode_steps=1).summarize(
             graph_to_tensor(graph, label=block.label)
         )
 
@@ -630,7 +630,7 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
     def test_compute_evaluation_metrics_includes_precision_recall_f1(self):
         records = [
             _evaluation_record(true_label=1, verdict="BULLISH"),
-            _evaluation_record(true_label=1, verdict="NEUTRAL"),
+            _evaluation_record(true_label=1, verdict="BEARISH"),
             _evaluation_record(true_label=-1, verdict="BULLISH"),
             _evaluation_record(true_label=-1, verdict="BEARISH"),
         ]
@@ -639,13 +639,19 @@ class StageTwoDebateJudgeTest(unittest.TestCase):
 
         self.assertEqual(metrics.total, 4)
         self.assertEqual(metrics.accuracy, 0.5)
-        self.assertEqual(metrics.coverage, 0.75)
         self.assertAlmostEqual(metrics.bullish.precision, 0.5)
         self.assertAlmostEqual(metrics.bullish.recall, 0.5)
         self.assertAlmostEqual(metrics.bullish.f1, 0.5)
-        self.assertAlmostEqual(metrics.bearish.precision, 1.0)
+        self.assertAlmostEqual(metrics.bearish.precision, 0.5)
         self.assertAlmostEqual(metrics.bearish.recall, 0.5)
-        self.assertAlmostEqual(metrics.bearish.f1, 2 / 3)
+        self.assertAlmostEqual(metrics.bearish.f1, 0.5)
+        self.assertEqual(
+            metrics.confusion_matrix,
+            {
+                "bullish": {"bullish": 1, "bearish": 1},
+                "bearish": {"bullish": 1, "bearish": 1},
+            },
+        )
 
 
 def _load_first_block_and_profiles():

@@ -87,7 +87,6 @@ def _write_block_judges(path: Path, data: dict[str, Any]) -> None:
                 "confidence": judge.get("confidence"),
                 "report": judge.get("report"),
                 "model_bullish_probability": model.get("bullish_probability"),
-                "model_predicted_label": model.get("predicted_label"),
                 "ode_bull_bear_margin": model.get("bull_bear_margin"),
                 "p_bull": score.get("p_bull"),
                 "p_bear": score.get("p_bear"),
@@ -95,7 +94,7 @@ def _write_block_judges(path: Path, data: dict[str, Any]) -> None:
                 "q_bear": score.get("q_bear"),
                 "e_bull": score.get("e_bull"),
                 "e_bear": score.get("e_bear"),
-                "coverage_c": score.get("c"),
+                "consensus_c": score.get("c"),
                 "depth_d": score.get("d"),
                 "attack_a": score.get("a"),
                 "rho": score.get("rho"),
@@ -117,7 +116,6 @@ def _write_block_judges(path: Path, data: dict[str, Any]) -> None:
             "confidence",
             "report",
             "model_bullish_probability",
-            "model_predicted_label",
             "ode_bull_bear_margin",
             "p_bull",
             "p_bear",
@@ -125,7 +123,7 @@ def _write_block_judges(path: Path, data: dict[str, Any]) -> None:
             "q_bear",
             "e_bull",
             "e_bear",
-            "coverage_c",
+            "consensus_c",
             "depth_d",
             "attack_a",
             "rho",
@@ -149,7 +147,7 @@ def _write_arguments(path: Path, data: dict[str, Any]) -> None:
                     "role": argument.get("role"),
                     "agent_id": argument.get("agent_id"),
                     "confidence": argument.get("confidence"),
-                    "targets": ";".join(argument.get("targets", [])),
+                    "target_args": ";".join(argument.get("target_args", argument.get("targets", []))),
                     "cited_comment_ids": ";".join(argument.get("cited_comment_ids", [])),
                     "claim": argument.get("claim"),
                 }
@@ -166,7 +164,7 @@ def _write_arguments(path: Path, data: dict[str, Any]) -> None:
             "role",
             "agent_id",
             "confidence",
-            "targets",
+            "target_args",
             "cited_comment_ids",
             "claim",
         ],
@@ -187,6 +185,7 @@ def _write_evidence(path: Path, data: dict[str, Any]) -> None:
                         "camp": argument.get("camp"),
                         "role": argument.get("role"),
                         "evidence_index": index,
+                        "source": evidence.get("source") or _compose_source(evidence),
                         "source_type": evidence.get("source_type"),
                         "source_id": evidence.get("source_id"),
                         "relevance": evidence.get("relevance"),
@@ -203,6 +202,7 @@ def _write_evidence(path: Path, data: dict[str, Any]) -> None:
             "camp",
             "role",
             "evidence_index",
+            "source",
             "source_type",
             "source_id",
             "relevance",
@@ -233,6 +233,14 @@ def _write_rows(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _compose_source(evidence: dict[str, Any]) -> str:
+    source_type = evidence.get("source_type")
+    source_id = evidence.get("source_id")
+    if source_type and source_id:
+        return f"{source_type}:{source_id}"
+    return str(source_type or source_id or "")
 
 
 if __name__ == "__main__":

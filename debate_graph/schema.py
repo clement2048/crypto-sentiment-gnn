@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 NodeType = Literal["comment", "argument"]
-RelationType = Literal["reply", "respond"]
+RelationType = Literal["interact"]
 
 
 @dataclass(frozen=True)

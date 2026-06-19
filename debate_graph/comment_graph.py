@@ -1,4 +1,7 @@
-"""Build reply graphs from CommentBlock trees."""
+"""Build comment nodes for the v3 single-relation graph.
+
+Reply structure is stored in comment node attrs["parent_id"] instead of reply edges.
+"""
 
 from __future__ import annotations
 
@@ -7,14 +10,13 @@ from debate_graph.schema import GraphEdge, GraphNode, comment_node_id
 
 
 def build_comment_graph(block: CommentBlock) -> tuple[list[GraphNode], list[GraphEdge]]:
-    """Build comment nodes and reply edges for one CommentBlock."""
+    """Build comment nodes; no reply edges are emitted in v3."""
     nodes: list[GraphNode] = []
-    edges: list[GraphEdge] = []
 
     root = block.root_comment
-    nodes.append(_comment_node(root, depth=0, is_root=True))
-    _walk_replies(root.replies, parent=root, depth=1, nodes=nodes, edges=edges)
-    return nodes, edges
+    nodes.append(_comment_node(root, depth=0, is_root=True, parent_id=None))
+    _walk_replies(root.replies, parent=root, depth=1, nodes=nodes)
+    return nodes, []
 
 
 def _walk_replies(
@@ -22,22 +24,13 @@ def _walk_replies(
     parent: RawComment,
     depth: int,
     nodes: list[GraphNode],
-    edges: list[GraphEdge],
 ) -> None:
     for reply in replies:
-        nodes.append(_comment_node(reply, depth=depth, is_root=False))
-        edges.append(
-            GraphEdge(
-                source=comment_node_id(reply.comment_id),
-                target=comment_node_id(parent.comment_id),
-                relation="reply",
-                attrs={"depth": depth},
-            )
-        )
-        _walk_replies(reply.replies, parent=reply, depth=depth + 1, nodes=nodes, edges=edges)
+        nodes.append(_comment_node(reply, depth=depth, is_root=False, parent_id=parent.comment_id))
+        _walk_replies(reply.replies, parent=reply, depth=depth + 1, nodes=nodes)
 
 
-def _comment_node(comment: RawComment, depth: int, is_root: bool) -> GraphNode:
+def _comment_node(comment: RawComment, depth: int, is_root: bool, parent_id: str | None) -> GraphNode:
     return GraphNode(
         node_id=comment_node_id(comment.comment_id),
         node_type="comment",
@@ -47,6 +40,7 @@ def _comment_node(comment: RawComment, depth: int, is_root: bool) -> GraphNode:
             "author": comment.author,
             "depth": depth,
             "is_root": is_root,
+            "parent_id": parent_id,
             "post_time": comment.post_time.isoformat(sep=" ") if comment.post_time else None,
         },
     )

@@ -361,6 +361,7 @@ class OpenAICompatibleJudgeClient:
                     "The previous response was not a valid JudgeOutput JSON object. "
                     "Repair it into exactly one valid JSON object with verdict, confidence, "
                     "report, score_vector, and consistency_flags. Return only JSON."
+                    " The verdict must be exactly BULLISH or BEARISH."
                 ),
             },
         ]
@@ -522,7 +523,7 @@ def _judge_input(
         "task": "Produce final JudgeOutput after comparing debate graph and Bi-ODE/model summary.",
         "block_id": transcript.block_id,
         "t0": transcript.t0.strftime("%Y-%m-%d %H:%M:%S"),
-        "model_summary": model_summary.to_dict(),
+        "model_summary": model_summary.explained_dict(),
         "debate_arguments": [
             {
                 "argument_id": item.argument_id,
@@ -533,7 +534,7 @@ def _judge_input(
                 "claim": item.claim,
                 "evidence": [evidence.to_dict() for evidence in item.evidence],
                 "confidence": item.confidence,
-                "targets": item.targets,
+                "target_args": item.target_args,
                 "round": item.round,
                 "seq": item.seq,
             }
@@ -567,6 +568,7 @@ def _judge_input(
         "rules": [
             "Do not use ground-truth labels, p1, or future prices.",
             "Base the decision only on debate logic and model/ODE summary.",
-            "If debate and model disagree, explain the disagreement and lower confidence.",
+            "Read model_summary.field_descriptions and model_summary.interpretation_notes before using numeric model fields.",
+            "If debate and model disagree, explain the disagreement, lower confidence, and still choose BULLISH or BEARISH.",
         ],
     }

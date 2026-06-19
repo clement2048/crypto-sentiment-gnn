@@ -103,7 +103,7 @@ def main() -> None:
     experiment.add_argument("--train-count", type=int, default=9)
     experiment.add_argument("--val-count", type=int, default=3)
     experiment.add_argument("--test-count", type=int, default=3)
-    experiment.add_argument("--rounds", type=int, default=1)
+    experiment.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     experiment.add_argument("--epochs", type=int, default=5)
     experiment.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
     experiment.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
@@ -118,7 +118,7 @@ def main() -> None:
     case_study.add_argument("--post-id", default=None)
     case_study.add_argument("--block-id", default=None)
     case_study.add_argument("--max-blocks", type=int, default=None)
-    case_study.add_argument("--rounds", type=int, default=1)
+    case_study.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     case_study.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="deepseek")
     case_study.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     case_study.add_argument("--seed", type=int, default=42)
@@ -250,11 +250,6 @@ def _cmd_evaluate(args: argparse.Namespace) -> None:
     )
     print(f"Evaluated samples: {metrics.total}")
     print(f"Accuracy: {metrics.accuracy:.4f}")
-    print(f"Coverage(non-neutral): {metrics.coverage:.4f}")
-    if metrics.directional_accuracy is None:
-        print("Directional accuracy(non-neutral only): N/A")
-    else:
-        print(f"Directional accuracy(non-neutral only): {metrics.directional_accuracy:.4f}")
     print(
         "Macro: "
         f"precision={metrics.macro_precision:.4f} "
@@ -332,8 +327,7 @@ def _cmd_split_experiment(args: argparse.Namespace) -> None:
             f"accuracy={metrics['accuracy']:.4f} "
             f"macro_f1={metrics['macro_f1']:.4f} "
             f"bull_f1={metrics['bullish']['f1']:.4f} "
-            f"bear_f1={metrics['bearish']['f1']:.4f} "
-            f"coverage={metrics['coverage']:.4f}"
+            f"bear_f1={metrics['bearish']['f1']:.4f}"
         )
         print(f"{split_name.upper()} confusion: {metrics['confusion_matrix']}")
     for split_name in ("train", "val", "test"):

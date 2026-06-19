@@ -1,34 +1,26 @@
-"""Build argument relation graphs from debate transcripts."""
+"""Build v3 single-relation debate graphs from debate transcripts."""
 
 from __future__ import annotations
 
 from collections import defaultdict
 
 from agent.schema import Argument, DebateTranscript
-from debate_graph.schema import (
-    GraphEdge,
-    GraphNode,
-    argument_node_id,
-)
+from debate_graph.schema import GraphEdge, GraphNode, argument_node_id
 
 
 def build_debate_graph(transcript: DebateTranscript) -> tuple[list[GraphNode], list[GraphEdge]]:
-    """把辩论 transcript 转成“论点节点 + 回应关系边”。
-
-    简化版双 agent 辩论不再把 evidence/citation 建成图边；引用内容保留在
-    Argument 文本和 evidence 字段里。图结构只表达“哪条论点回应哪条论点”。
-    """
+    """Convert arguments into nodes and target_args into interact edges."""
     max_seq_by_round = _max_seq_by_round(transcript.arguments)
     nodes = [
         _argument_node(argument, max_seq_by_round.get(argument.round, 1))
         for argument in transcript.arguments
     ]
     by_id = {argument.argument_id: argument for argument in transcript.arguments}
-    return nodes, _respond_edges(transcript.arguments, by_id)
+    return nodes, _interact_edges(transcript.arguments, by_id)
 
 
 def _argument_node(argument: Argument, max_seq: int) -> GraphNode:
-    """创建论点节点，并保存论文中的时间属性。"""
+    t_index = argument.t_index or _argument_time(argument, max_seq)
     return GraphNode(
         node_id=argument_node_id(argument.argument_id),
         node_type="argument",
@@ -37,36 +29,41 @@ def _argument_node(argument: Argument, max_seq: int) -> GraphNode:
         attrs={
             "agent_id": argument.agent_id,
             "camp": argument.camp,
+            "stance": argument.camp,
             "role": argument.role,
             "confidence": argument.confidence,
             "round": argument.round,
             "seq": argument.seq,
             "phase": argument.phase,
-            "relative_time": _argument_time(argument, max_seq),
+            "target_args": argument.target_args,
+            "evidence": [item.to_dict() for item in argument.evidence],
+            "t_index": t_index,
         },
     )
 
 
-def _respond_edges(arguments: list[Argument], by_id: dict[str, Argument]) -> list[GraphEdge]:
-    """根据 argument.targets 生成 respond 边。"""
+def _interact_edges(arguments: list[Argument], by_id: dict[str, Argument]) -> list[GraphEdge]:
+    """Build only interact edges; support/rebuttal/respond semantics stay in node attrs."""
     edges: list[GraphEdge] = []
     max_seq_by_round = _max_seq_by_round(arguments)
     for argument in arguments:
-        for target_id in argument.targets:
+        source_time = argument.t_index or _argument_time(argument, max_seq_by_round.get(argument.round, 1))
+        for target_id in argument.target_args:
             target = by_id.get(target_id)
             if target is None:
                 continue
-            attrs = {
-                "delta_t": _argument_time(argument, max_seq_by_round.get(argument.round, 1))
-                - _argument_time(target, max_seq_by_round.get(target.round, 1))
-            }
+            target_time = target.t_index or _argument_time(target, max_seq_by_round.get(target.round, 1))
             edges.append(
                 GraphEdge(
                     source=argument_node_id(argument.argument_id),
                     target=argument_node_id(target_id),
-                    relation="respond",
+                    relation="interact",
                     weight=argument.confidence,
-                    attrs=attrs,
+                    attrs={
+                        "delta_t": source_time - target_time,
+                        "source_camp": argument.camp,
+                        "target_camp": target.camp,
+                    },
                 )
             )
     return edges
@@ -80,6 +77,4 @@ def _max_seq_by_round(arguments: list[Argument]) -> dict[int, int]:
 
 
 def _argument_time(argument: Argument, max_seq: int) -> float:
-    """把 round/seq 转成连续相对时间，只作为属性使用。"""
-    seq_scale = max(max_seq, 1)
-    return float(argument.round - 1) + float(argument.seq - 1) / seq_scale
+    return float(argument.round - 1) + float(argument.seq - 1) / max(max_seq, 1)

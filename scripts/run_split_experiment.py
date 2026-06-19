@@ -13,17 +13,17 @@ import torch
 
 from agent import DebateOrchestrator, DebateTranscript, create_debate_client
 from agent.llm_client import DebateClient
-from config import DEFAULT_DEBATE_ROUNDS, LEARNING_RATE, PRINT_SAMPLES
+from config import DEFAULT_DEBATE_ROUNDS, LEARNING_RATE, PRINT_SAMPLES, TRAIN_CHECKPOINT_DIR
 from data import build_comment_blocks, load_posts
 from data.schema import CommentBlock
 from debate_graph import HeteroGraph, build_hetero_graph, graph_to_tensor
 from debate_graph.graph_batch import GraphTensor, NODE_FEATURE_DIM
 from judge import create_judge_client
-from model import GraphSentimentModel
-from model.losses import classification_loss
+from model import GraphSentimentModel, TrainingConfig, train_graph_model
 from profiles import ProfileStore
 from scripts.evaluate_pipeline import EvaluationMetrics, compute_metrics
 from scripts.run_debate import DEFAULT_INPUT
+from verification import verify_market_behavior
 
 
 @dataclass
@@ -77,7 +77,15 @@ def run_split_experiment(
     test_contexts = contexts[train_count + val_count :]
 
     model = GraphSentimentModel(input_dim=NODE_FEATURE_DIM)
-    train_losses = _train_model(model, [item.graph_tensor for item in train_contexts], epochs, learning_rate)
+    training = train_graph_model(
+        model,
+        [item.graph_tensor for item in train_contexts],
+        TrainingConfig(
+            epochs=epochs,
+            learning_rate=learning_rate,
+            checkpoint_path=str(Path(TRAIN_CHECKPOINT_DIR) / "split_experiment.pt"),
+        ),
+    )
 
     judge = judge_client or create_judge_client(judge_mode)
     train_records = _records_for_contexts(model, judge, train_contexts)
@@ -107,7 +115,8 @@ def run_split_experiment(
                 "test": [block.block_id for block in test_blocks],
             },
         },
-        "train_losses": train_losses,
+        "train_losses": training.train_losses,
+        "training": training.to_dict(),
         "metrics": {
             "train": compute_metrics(train_records).to_dict(),
             "val": compute_metrics(val_records).to_dict() if val_records else None,
@@ -133,7 +142,7 @@ def main() -> None:
     parser.add_argument("--train-count", type=int, default=9)
     parser.add_argument("--val-count", type=int, default=3)
     parser.add_argument("--test-count", type=int, default=3)
-    parser.add_argument("--rounds", type=int, default=1)
+    parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
     parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
@@ -180,27 +189,6 @@ def _build_context(
     )
 
 
-def _train_model(
-    model: GraphSentimentModel,
-    tensors: list[GraphTensor],
-    epochs: int,
-    learning_rate: float,
-) -> list[float]:
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    losses: list[float] = []
-    for _epoch in range(epochs):
-        total_loss = torch.tensor(0.0)
-        for graph in tensors:
-            assert graph.label is not None
-            total_loss = total_loss + classification_loss(model(graph), graph.label)
-        loss = total_loss / max(len(tensors), 1)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        losses.append(float(loss.detach()))
-    return losses
-
-
 def _records_for_contexts(
     model: GraphSentimentModel,
     judge,
@@ -222,6 +210,11 @@ def _records_for_contexts(
                 "graph": context.graph.to_dict(),
                 "model_summary": model_summary.to_dict(),
                 "judge": judge_output.to_dict(),
+                "market_verification": verify_market_behavior(
+                    context.block.p0,
+                    context.block.p1,
+                    judge_output.verdict,
+                ).to_dict(),
             }
         )
     return records
@@ -266,11 +259,10 @@ def _print_metrics(split_name: str, metrics: dict[str, Any]) -> None:
         f"{split_name.upper()} metrics: "
         f"n={metrics['total']} "
         f"accuracy={metrics['accuracy']:.4f} "
-        f"macro_f1={metrics['macro_f1']:.4f} "
-        f"bull_f1={metrics['bullish']['f1']:.4f} "
-        f"bear_f1={metrics['bearish']['f1']:.4f} "
-        f"coverage={metrics['coverage']:.4f}"
-    )
+            f"macro_f1={metrics['macro_f1']:.4f} "
+            f"bull_f1={metrics['bullish']['f1']:.4f} "
+            f"bear_f1={metrics['bearish']['f1']:.4f}"
+        )
     print(f"{split_name.upper()} confusion: {metrics['confusion_matrix']}")
 
 

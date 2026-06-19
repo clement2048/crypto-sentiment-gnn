@@ -407,7 +407,8 @@ class AnthropicCompatibleJudgeClient:
                         "text": (
                             "The previous response was not a valid JudgeOutput JSON object. "
                             "Repair it into exactly one valid JSON object with verdict, confidence, "
-                            "report, score_vector, and consistency_flags. Return only JSON."
+                            "report, score_vector, and consistency_flags. Return only JSON. "
+                            "The verdict must be exactly BULLISH or BEARISH."
                         ),
                     }
                 ],
@@ -521,7 +522,7 @@ def _build_user_prompt(
                 "phase": item.phase,
                 "claim": item.claim,
                 "confidence": item.confidence,
-                "targets": item.targets,
+                "target_args": item.target_args,
             }
             for item in prior_arguments[-16:]
         ],
@@ -535,7 +536,7 @@ def _phase_instructions(phase: str) -> str:
             "Generate an independent opening argument. Do not target previous arguments."
         ),
         "rebuttal": (
-            "Generate a concise targeted rebuttal. Use only target ids from available_target_ids, "
+            "Generate a concise targeted rebuttal. Use only target_args from available_target_args, "
             "answer the opponent's latest claim directly, and ground the response in supplied text "
             "or time-safe profile signals."
         ),
@@ -550,7 +551,7 @@ def _phase_instructions(phase: str) -> str:
         ),
         "cross_response": (
             "Read opponent arguments and generate a targeted response/rebuttal. "
-            "Choose target ids only from available_target_ids."
+            "Choose target_args only from available_target_args."
         ),
         "counter_reflection": (
             "Act as the camp's reflection agent after opponent attacks. Identify the most damaging "
@@ -691,7 +692,7 @@ def _normalize_argument_metadata(
     argument.phase = phase
     if available_target_ids is not None:
         allowed = set(available_target_ids)
-        argument.targets = [target_id for target_id in argument.targets if target_id in allowed]
+        argument.target_args = [target_id for target_id in argument.target_args if target_id in allowed]
     return argument
 
 
@@ -767,7 +768,7 @@ def _judge_input(
         "task": "Produce final JudgeOutput after comparing debate graph and Bi-ODE/model summary.",
         "block_id": transcript.block_id,
         "t0": transcript.t0.strftime("%Y-%m-%d %H:%M:%S"),
-        "model_summary": model_summary.to_dict(),
+        "model_summary": model_summary.explained_dict(),
         "debate_arguments": [
             {
                 "argument_id": item.argument_id,
@@ -777,7 +778,7 @@ def _judge_input(
                 "claim": item.claim,
                 "evidence": [evidence.to_dict() for evidence in item.evidence],
                 "confidence": item.confidence,
-                "targets": item.targets,
+                "target_args": item.target_args,
                 "round": item.round,
                 "seq": item.seq,
             }
@@ -810,6 +811,7 @@ def _judge_input(
         "rules": [
             "Do not use ground-truth labels, p1, or future prices.",
             "Base the decision only on debate logic and model/ODE summary.",
-            "If debate and model disagree, explain the disagreement and lower confidence.",
+            "Read model_summary.field_descriptions and model_summary.interpretation_notes before using numeric model fields.",
+            "If debate and model disagree, explain the disagreement, lower confidence, and still choose BULLISH or BEARISH.",
         ],
     }

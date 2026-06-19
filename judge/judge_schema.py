@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from config import PROBABILITY_MAX, PROBABILITY_MIN
 
-Verdict = Literal["BULLISH", "BEARISH", "NEUTRAL"]
+Verdict = Literal["BULLISH", "BEARISH"]
 
 
 @dataclass
@@ -34,7 +34,7 @@ class JudgeScoreVector:
             e_bear=_clamp01(data.get("e_bear", 0.0)),
             c=_clamp01(data.get("c", 0.0)),
             d=_clamp01(data.get("d", 0.0)),
-            a=_clamp01(data.get("a", 0.0)),
+            a=_clamp_minus1_1(data.get("a", 0.0)),
             rho=_clamp01(data.get("rho", 0.0)),
         )
 
@@ -60,11 +60,13 @@ class JudgeOutput:
     report: str
     score_vector: JudgeScoreVector
     consistency_flags: list[str]
+    weak_dims: list[str] | None = None
+    supplement_suggestions: list[str] | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "JudgeOutput":
         verdict = data.get("verdict")
-        if verdict not in ("BULLISH", "BEARISH", "NEUTRAL"):
+        if verdict not in ("BULLISH", "BEARISH"):
             raise ValueError(f"Invalid judge verdict: {verdict}")
         score_data = data.get("score_vector")
         if not isinstance(score_data, dict):
@@ -75,6 +77,8 @@ class JudgeOutput:
             report=str(data.get("report") or ""),
             score_vector=JudgeScoreVector.from_dict(score_data),
             consistency_flags=[str(item) for item in data.get("consistency_flags", [])],
+            weak_dims=[str(item) for item in data.get("weak_dims", [])],
+            supplement_suggestions=[str(item) for item in data.get("supplement_suggestions", [])],
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -84,6 +88,8 @@ class JudgeOutput:
             "report": self.report,
             "score_vector": self.score_vector.to_dict(),
             "consistency_flags": self.consistency_flags,
+            "weak_dims": self.weak_dims or [],
+            "supplement_suggestions": self.supplement_suggestions or [],
         }
 
 
@@ -93,6 +99,14 @@ def _clamp01(value: Any) -> float:
     except (TypeError, ValueError):
         numeric = 0.0
     return max(PROBABILITY_MIN, min(PROBABILITY_MAX, numeric))
+
+
+def _clamp_minus1_1(value: Any) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        numeric = 0.0
+    return max(-1.0, min(1.0, numeric))
 
 
 

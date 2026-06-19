@@ -4,17 +4,21 @@ from __future__ import annotations
 
 import argparse
 import sys
-
-import torch
+from pathlib import Path
 
 from agent import DebateOrchestrator, create_debate_client
 from agent.llm_client import DebateClient
-from config import DEFAULT_DEBATE_ROUNDS, LEARNING_RATE, TRAIN_PROTOTYPE_EPOCHS, TRAIN_PROTOTYPE_LIMIT_BLOCKS
+from config import (
+    DEFAULT_DEBATE_ROUNDS,
+    LEARNING_RATE,
+    TRAIN_CHECKPOINT_DIR,
+    TRAIN_PROTOTYPE_EPOCHS,
+    TRAIN_PROTOTYPE_LIMIT_BLOCKS,
+)
 from data import build_comment_blocks, load_posts
 from debate_graph import build_hetero_graph, graph_to_tensor
 from debate_graph.graph_batch import GraphTensor, NODE_FEATURE_DIM
-from model import GraphSentimentModel
-from model.losses import classification_loss
+from model import GraphSentimentModel, TrainingConfig, train_graph_model
 from profiles import ProfileStore
 from scripts.run_debate import DEFAULT_INPUT
 
@@ -50,7 +54,8 @@ def train_prototype(
     learning_rate: float = LEARNING_RATE,
     mode: str = "siliconflow",
     client: DebateClient | None = None,
-) -> dict[str, float]:
+    checkpoint_path: str | None = None,
+) -> dict[str, float | str]:
     tensors = build_training_tensors(
         input_path,
         limit_blocks=limit_blocks,
@@ -62,27 +67,35 @@ def train_prototype(
         raise ValueError("No graph tensors available for training")
 
     model = GraphSentimentModel(input_dim=NODE_FEATURE_DIM)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    if checkpoint_path is None:
+        checkpoint_path = str(Path(TRAIN_CHECKPOINT_DIR) / "train_prototype.pt")
+    training = train_graph_model(
+        model,
+        tensors,
+        TrainingConfig(
+            epochs=epochs,
+            learning_rate=learning_rate,
+            checkpoint_path=checkpoint_path,
+        ),
+    )
 
-    last_loss = 0.0
-    for _epoch in range(epochs):
-        total_loss = torch.tensor(0.0)
-        for graph in tensors:
-            assert graph.label is not None
-            prob = model(graph)
-            total_loss = total_loss + classification_loss(prob, graph.label)
-        loss = total_loss / len(tensors)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        last_loss = float(loss.detach())
+    import torch
 
     with torch.no_grad():
         probs = [float(model(graph)) for graph in tensors]
+    last = training.history[-1] if training.history else None
     return {
         "graphs": float(len(tensors)),
-        "final_loss": last_loss,
+        "final_loss": float(last.total_loss if last else 0.0),
+        "classification_loss": float(last.classification if last else 0.0),
+        "initial_alignment_loss": float(last.initial_alignment if last else 0.0),
+        "smoothness_loss": float(last.smoothness if last else 0.0),
+        "mutual_exclusion_loss": float(last.mutual_exclusion if last else 0.0),
+        "regression_loss": float(last.regression if last else 0.0),
+        "epochs_ran": float(training.epochs_ran),
+        "best_loss": float(training.best_loss),
         "mean_probability": sum(probs) / len(probs),
+        "checkpoint_path": training.checkpoint_path or "",
     }
 
 
@@ -97,6 +110,7 @@ def main() -> None:
     parser.add_argument("--mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--epochs", type=int, default=TRAIN_PROTOTYPE_EPOCHS)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
+    parser.add_argument("--checkpoint-path", default=None)
     args = parser.parse_args()
 
     metrics = train_prototype(
@@ -106,12 +120,14 @@ def main() -> None:
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         mode=args.mode,
+        checkpoint_path=args.checkpoint_path,
     )
     print(
         "Prototype training complete: "
         f"graphs={metrics['graphs']:.0f} "
         f"final_loss={metrics['final_loss']:.4f} "
-        f"mean_probability={metrics['mean_probability']:.4f}"
+        f"mean_probability={metrics['mean_probability']:.4f} "
+        f"checkpoint={metrics['checkpoint_path']}"
     )
 
 

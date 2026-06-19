@@ -38,7 +38,7 @@ def run_case_study(
     post_id: str | None = None,
     block_id: str | None = None,
     max_blocks: int | None = None,
-    rounds: int = 1,
+    rounds: int = DEFAULT_DEBATE_ROUNDS,
     debate_mode: str = "deepseek",
     judge_mode: str = "siliconflow",
     seed: int = 42,
@@ -116,7 +116,7 @@ def main() -> None:
     parser.add_argument("--post-id", default=None)
     parser.add_argument("--block-id", default=None)
     parser.add_argument("--max-blocks", type=int, default=None)
-    parser.add_argument("--rounds", type=int, default=1)
+    parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="deepseek")
     parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--seed", type=int, default=42)
@@ -218,13 +218,13 @@ def render_case_markdown(result: dict[str, Any]) -> str:
                 f"#### {argument['seq']}. {argument['camp']} / {argument['role']}",
                 "",
                 f"- confidence: `{argument['confidence']:.3f}`",
-                f"- targets: `{argument['targets']}`",
+                f"- target_args: `{argument.get('target_args', argument.get('targets', []))}`",
                 f"- claim: {argument['claim']}",
                 "- evidence:",
             ])
             for evidence in argument["evidence"]:
                 lines.append(
-                    f"  - `{evidence['source_type']}` `{evidence['source_id']}` "
+                    f"  - `{evidence.get('source') or _compose_source(evidence)}` "
                     f"relevance=`{evidence['relevance']:.2f}`: {_one_line(evidence['quote'])}"
                 )
             lines.append("")
@@ -284,6 +284,14 @@ def _quote(text: str) -> str:
 def _one_line(text: str, limit: int = 240) -> str:
     compact = " ".join(str(text).split())
     return compact[:limit] + ("..." if len(compact) > limit else "")
+
+
+def _compose_source(evidence: dict[str, Any]) -> str:
+    source_type = evidence.get("source_type")
+    source_id = evidence.get("source_id")
+    if source_type and source_id:
+        return f"{source_type}:{source_id}"
+    return str(source_type or source_id or "")
 
 
 if __name__ == "__main__":
