@@ -17,7 +17,7 @@ from config import (
 )
 from data import build_comment_blocks, load_posts
 from debate_graph import build_hetero_graph, graph_to_tensor
-from debate_graph.graph_batch import GraphTensor, NODE_FEATURE_DIM
+from debate_graph.graph_batch import GraphTensor
 from model import GraphSentimentModel, TrainingConfig, train_graph_model
 from profiles import ProfileStore
 from scripts.run_debate import DEFAULT_INPUT
@@ -29,6 +29,7 @@ def build_training_tensors(
     rounds: int = DEFAULT_DEBATE_ROUNDS,
     mode: str = "siliconflow",
     client: DebateClient | None = None,
+    embedding_backend: str | None = None,
 ) -> list[GraphTensor]:
     posts = load_posts(input_path)
     blocks, _issues = build_comment_blocks(posts)
@@ -42,7 +43,7 @@ def build_training_tensors(
         profiles = profile_store.get_profiles_for_block(block)
         transcript = orchestrator.run(block, profiles, rounds=rounds)
         graph = build_hetero_graph(block, transcript)
-        tensors.append(graph_to_tensor(graph, label=block.label))
+        tensors.append(graph_to_tensor(graph, label=block.label, embedding_backend=embedding_backend))
     return tensors
 
 
@@ -55,6 +56,7 @@ def train_prototype(
     mode: str = "siliconflow",
     client: DebateClient | None = None,
     checkpoint_path: str | None = None,
+    embedding_backend: str | None = None,
 ) -> dict[str, float | str]:
     tensors = build_training_tensors(
         input_path,
@@ -62,11 +64,12 @@ def train_prototype(
         rounds=rounds,
         mode=mode,
         client=client,
+        embedding_backend=embedding_backend,
     )
     if not tensors:
         raise ValueError("No graph tensors available for training")
 
-    model = GraphSentimentModel(input_dim=NODE_FEATURE_DIM)
+    model = GraphSentimentModel(input_dim=tensors[0].x.shape[1])
     if checkpoint_path is None:
         checkpoint_path = str(Path(TRAIN_CHECKPOINT_DIR) / "train_prototype.pt")
     training = train_graph_model(
@@ -111,6 +114,11 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=TRAIN_PROTOTYPE_EPOCHS)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
     parser.add_argument("--checkpoint-path", default=None)
+    parser.add_argument(
+        "--embedding-backend",
+        choices=["none", "sentencebert", "finbert", "sentencebert_finbert"],
+        default=None,
+    )
     args = parser.parse_args()
 
     metrics = train_prototype(
@@ -121,6 +129,7 @@ def main() -> None:
         learning_rate=args.learning_rate,
         mode=args.mode,
         checkpoint_path=args.checkpoint_path,
+        embedding_backend=args.embedding_backend,
     )
     print(
         "Prototype training complete: "
@@ -133,7 +142,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 
 
 

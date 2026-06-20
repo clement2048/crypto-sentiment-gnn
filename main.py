@@ -70,6 +70,7 @@ def main() -> None:
     train.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     train.add_argument("--epochs", type=int, default=TRAIN_PROTOTYPE_EPOCHS)
     train.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
+    _add_embedding_arg(train)
     train.set_defaults(func=_cmd_train_prototype)
 
     # full：当前最完整的原型链路，最后由 model-aware judge 输出 JudgeOutput。
@@ -81,6 +82,8 @@ def main() -> None:
     full.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
     full.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     full.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    full.add_argument("--reflection-rounds", type=int, default=0)
+    _add_embedding_arg(full)
     full.add_argument("--output-jsonl", type=str, default=None)
     full.set_defaults(func=_cmd_full)
 
@@ -93,6 +96,7 @@ def main() -> None:
     evaluate.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
     evaluate.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     evaluate.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    _add_embedding_arg(evaluate)
     evaluate.add_argument("--output-jsonl", type=str, default=None)
     evaluate.add_argument("--metrics-json", type=str, default=None)
     evaluate.set_defaults(func=_cmd_evaluate)
@@ -109,6 +113,7 @@ def main() -> None:
     experiment.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     experiment.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     experiment.add_argument("--seed", type=int, default=42)
+    _add_embedding_arg(experiment)
     experiment.add_argument("--output-json", type=str, default=None)
     experiment.set_defaults(func=_cmd_split_experiment)
 
@@ -132,6 +137,15 @@ def main() -> None:
 
 def _add_input_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--input", default=DEFAULT_INPUT, help="JSONL file, directory, or glob pattern.")
+
+
+def _add_embedding_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--embedding-backend",
+        choices=["none", "sentencebert", "finbert", "sentencebert_finbert"],
+        default=None,
+        help="Optional text embedding backend appended to the 12 structural node features.",
+    )
 
 
 def _cmd_blocks(args: argparse.Namespace) -> None:
@@ -201,6 +215,7 @@ def _cmd_train_prototype(args: argparse.Namespace) -> None:
         rounds=args.rounds,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
+        embedding_backend=args.embedding_backend,
     )
     print(
         "Prototype training complete: "
@@ -220,6 +235,8 @@ def _cmd_full(args: argparse.Namespace) -> None:
         learning_rate=args.learning_rate,
         debate_mode=args.debate_mode,
         judge_mode=args.judge_mode,
+        reflection_rounds=args.reflection_rounds,
+        embedding_backend=args.embedding_backend,
     )
     print(f"Full pipeline records: {len(records)}")
     for record in records[: min(len(records), PRINT_SAMPLES)]:
@@ -247,6 +264,7 @@ def _cmd_evaluate(args: argparse.Namespace) -> None:
         learning_rate=args.learning_rate,
         debate_mode=args.debate_mode,
         judge_mode=args.judge_mode,
+        embedding_backend=args.embedding_backend,
     )
     print(f"Evaluated samples: {metrics.total}")
     print(f"Accuracy: {metrics.accuracy:.4f}")
@@ -302,6 +320,7 @@ def _cmd_split_experiment(args: argparse.Namespace) -> None:
         debate_mode=args.debate_mode,
         judge_mode=args.judge_mode,
         seed=args.seed,
+        embedding_backend=args.embedding_backend,
     )
     config = result["config"]
     print(
@@ -396,4 +415,3 @@ def _write_jsonl(path: str, records: list[dict[str, object]]) -> None:
 
 if __name__ == "__main__":
     main()
-

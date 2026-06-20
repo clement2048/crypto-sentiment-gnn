@@ -27,7 +27,7 @@ from config import (
 from data import build_comment_blocks, load_posts
 from data.schema import CommentBlock
 from debate_graph import HeteroGraph, build_hetero_graph, graph_to_tensor
-from debate_graph.graph_batch import GraphTensor, NODE_FEATURE_DIM
+from debate_graph.graph_batch import GraphTensor
 from judge import create_judge_client, reflection_signal_from_judge
 from model import GraphSentimentModel, TrainingConfig, train_graph_model
 from profiles import ProfileStore
@@ -55,6 +55,7 @@ def run_full_pipeline(
     debate_mode: str = "siliconflow",
     judge_mode: str = "siliconflow",
     reflection_rounds: int = 0,
+    embedding_backend: str | None = None,
     debate_client: DebateClient | None = None,
     judge_client: object | None = None,
 ) -> list[dict[str, object]]:
@@ -65,8 +66,9 @@ def run_full_pipeline(
         limit_blocks=limit_blocks,
         rounds=rounds,
         orchestrator=orchestrator,
+        embedding_backend=embedding_backend,
     )
-    model = GraphSentimentModel(input_dim=NODE_FEATURE_DIM)
+    model = GraphSentimentModel(input_dim=_graph_input_dim(contexts))
     training_summary: dict[str, object] | None = None
     if train_epochs > 0:
         training = train_graph_model(
@@ -106,7 +108,11 @@ def run_full_pipeline(
                 reflection_rounds=1,
             )
             context.graph = build_hetero_graph(context.block, context.transcript)
-            context.graph_tensor = graph_to_tensor(context.graph, label=context.block.label)
+            context.graph_tensor = graph_to_tensor(
+                context.graph,
+                label=context.block.label,
+                embedding_backend=embedding_backend,
+            )
             model_summary = model.summarize(context.graph_tensor)
             judge_output = judge.judge(context.transcript, model_summary, context.graph)
 
@@ -147,6 +153,11 @@ def main() -> None:
     parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--reflection-rounds", type=int, default=0)
+    parser.add_argument(
+        "--embedding-backend",
+        choices=["none", "sentencebert", "finbert", "sentencebert_finbert"],
+        default=None,
+    )
     parser.add_argument("--output-jsonl", type=str, default=None)
     args = parser.parse_args()
 
@@ -159,6 +170,7 @@ def main() -> None:
         debate_mode=args.debate_mode,
         judge_mode=args.judge_mode,
         reflection_rounds=args.reflection_rounds,
+        embedding_backend=args.embedding_backend,
     )
     print(f"Full pipeline records: {len(records)}")
     for record in records[: min(len(records), PRINT_SAMPLES)]:
@@ -187,6 +199,7 @@ def _build_contexts(
     limit_blocks: int | None,
     rounds: int,
     orchestrator: DebateOrchestrator,
+    embedding_backend: str | None,
 ) -> list[PipelineContext]:
     posts = load_posts(input_path)
     blocks, _issues = build_comment_blocks(posts)
@@ -205,10 +218,16 @@ def _build_contexts(
                 profiles=profiles,
                 transcript=transcript,
                 graph=graph,
-                graph_tensor=graph_to_tensor(graph, label=block.label),
+                graph_tensor=graph_to_tensor(graph, label=block.label, embedding_backend=embedding_backend),
             )
         )
     return contexts
+
+
+def _graph_input_dim(contexts: list[PipelineContext]) -> int:
+    if not contexts:
+        raise ValueError("No graph contexts available")
+    return int(contexts[0].graph_tensor.x.shape[1])
 
 
 def _mean_argument_confidence(transcript: DebateTranscript) -> float | None:

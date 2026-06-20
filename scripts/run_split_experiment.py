@@ -17,7 +17,7 @@ from config import DEFAULT_DEBATE_ROUNDS, LEARNING_RATE, PRINT_SAMPLES, TRAIN_CH
 from data import build_comment_blocks, load_posts
 from data.schema import CommentBlock
 from debate_graph import HeteroGraph, build_hetero_graph, graph_to_tensor
-from debate_graph.graph_batch import GraphTensor, NODE_FEATURE_DIM
+from debate_graph.graph_batch import GraphTensor
 from judge import create_judge_client
 from model import GraphSentimentModel, TrainingConfig, train_graph_model
 from profiles import ProfileStore
@@ -46,6 +46,7 @@ def run_split_experiment(
     debate_mode: str = "siliconflow",
     judge_mode: str = "siliconflow",
     seed: int = 42,
+    embedding_backend: str | None = None,
     debate_client: DebateClient | None = None,
     judge_client: object | None = None,
 ) -> dict[str, Any]:
@@ -69,14 +70,14 @@ def run_split_experiment(
     profile_store = ProfileStore.from_blocks(sorted_blocks)
     orchestrator = DebateOrchestrator(client=debate_client or create_debate_client(debate_mode))
     contexts = [
-        _build_context(block, profile_store, orchestrator, rounds)
+        _build_context(block, profile_store, orchestrator, rounds, embedding_backend)
         for block in selected
     ]
     train_contexts = contexts[:train_count]
     val_contexts = contexts[train_count : train_count + val_count]
     test_contexts = contexts[train_count + val_count :]
 
-    model = GraphSentimentModel(input_dim=NODE_FEATURE_DIM)
+    model = GraphSentimentModel(input_dim=contexts[0].graph_tensor.x.shape[1])
     training = train_graph_model(
         model,
         [item.graph_tensor for item in train_contexts],
@@ -148,6 +149,11 @@ def main() -> None:
     parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--embedding-backend",
+        choices=["none", "sentencebert", "finbert", "sentencebert_finbert"],
+        default=None,
+    )
     parser.add_argument("--output-json", type=str, default=None)
     args = parser.parse_args()
 
@@ -162,6 +168,7 @@ def main() -> None:
         debate_mode=args.debate_mode,
         judge_mode=args.judge_mode,
         seed=args.seed,
+        embedding_backend=args.embedding_backend,
     )
     _print_result(result)
     if args.output_json:
@@ -176,6 +183,7 @@ def _build_context(
     profile_store: ProfileStore,
     orchestrator: DebateOrchestrator,
     rounds: int,
+    embedding_backend: str | None,
 ) -> ExperimentContext:
     profiles = profile_store.get_profiles_for_block(block)
     transcript = orchestrator.run(block, profiles, rounds=rounds)
@@ -185,7 +193,7 @@ def _build_context(
         profiles=profiles,
         transcript=transcript,
         graph=graph,
-        graph_tensor=graph_to_tensor(graph, label=block.label),
+        graph_tensor=graph_to_tensor(graph, label=block.label, embedding_backend=embedding_backend),
     )
 
 
@@ -268,5 +276,4 @@ def _print_metrics(split_name: str, metrics: dict[str, Any]) -> None:
 
 if __name__ == "__main__":
     main()
-
 

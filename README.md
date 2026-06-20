@@ -17,6 +17,8 @@ verification/   市场价格方向与活动强度验证
 main.py         统一命令行入口
 ```
 
+当前实现状态、待完成项和 MacBook 上的 Obsidian 文档路径见 [`PROJECT_STATUS.md`](PROJECT_STATUS.md)。
+
 ## 环境
 
 推荐使用本机 anaconda 的 `sentiment` 环境：
@@ -27,6 +29,14 @@ main.py         统一命令行入口
 ```
 
 系统默认 `python` 可能没有安装 `torch`。
+
+如需测试文本 embedding 节点特征，额外安装：
+
+```bash
+pip install -r requirements-embedding.txt
+```
+
+默认仍使用 12 维结构特征；可通过 `--embedding-backend sentencebert`、`--embedding-backend finbert` 或 `--embedding-backend sentencebert_finbert` 拼接文本向量。embedding 缓存在 `outputs/embedding_cache/`。
 
 ## 数据流
 
@@ -52,6 +62,13 @@ python main.py graphs --limit-blocks 1 --rounds 4 --mode siliconflow
 python main.py full --limit-blocks 1 --rounds 4 --debate-mode siliconflow --judge-mode siliconflow
 python main.py evaluate --rounds 4 --debate-mode siliconflow --judge-mode siliconflow
 python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 4 --epochs 5 --debate-mode siliconflow --judge-mode siliconflow
+```
+
+文本 embedding 测试示例：
+
+```bash
+python main.py train-prototype --limit-blocks 1 --rounds 1 --epochs 1 --embedding-backend sentencebert
+python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 4 --epochs 5 --embedding-backend finbert
 ```
 
 可选 provider：

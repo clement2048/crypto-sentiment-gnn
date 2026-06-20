@@ -76,6 +76,7 @@ def evaluate_pipeline(
     learning_rate: float = LEARNING_RATE,
     debate_mode: str = "siliconflow",
     judge_mode: str = "siliconflow",
+    embedding_backend: str | None = None,
     debate_client: DebateClient | None = None,
     judge_client: object | None = None,
 ) -> tuple[list[dict[str, object]], EvaluationMetrics]:
@@ -87,6 +88,7 @@ def evaluate_pipeline(
         learning_rate=learning_rate,
         debate_mode=debate_mode,
         judge_mode=judge_mode,
+        embedding_backend=embedding_backend,
         debate_client=debate_client,
         judge_client=judge_client,
     )
@@ -141,6 +143,11 @@ def main() -> None:
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
     parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
     parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    parser.add_argument(
+        "--embedding-backend",
+        choices=["none", "sentencebert", "finbert", "sentencebert_finbert"],
+        default=None,
+    )
     parser.add_argument("--output-jsonl", type=str, default=None)
     parser.add_argument("--metrics-json", type=str, default=None)
     args = parser.parse_args()
@@ -153,6 +160,7 @@ def main() -> None:
         learning_rate=args.learning_rate,
         debate_mode=args.debate_mode,
         judge_mode=args.judge_mode,
+        embedding_backend=args.embedding_backend,
     )
     _print_metrics(metrics)
 

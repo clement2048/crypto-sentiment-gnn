@@ -133,8 +133,16 @@ SILICONFLOW_CACHE_DIR = PROJECT_ROOT / "outputs" / "llm_cache" / "siliconflow"
 # -----------------------------
 # 图张量特征
 # -----------------------------
-# 当前原型使用 8 维手工结构特征；后续可拼接文本 embedding。
+# 当前原型默认使用 12 维手工结构特征；可通过命令行拼接文本 embedding。
 NODE_FEATURE_DIM = 12
+
+# 可选值：none / sentencebert / finbert / sentencebert_finbert。
+TEXT_EMBEDDING_BACKEND = os.getenv("TEXT_EMBEDDING_BACKEND", "none")
+SENTENCEBERT_MODEL_NAME = os.getenv("SENTENCEBERT_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
+SENTENCEBERT_EMBEDDING_DIM = int(os.getenv("SENTENCEBERT_EMBEDDING_DIM", "384"))
+FINBERT_MODEL_NAME = os.getenv("FINBERT_MODEL_NAME", "ProsusAI/finbert")
+FINBERT_EMBEDDING_DIM = int(os.getenv("FINBERT_EMBEDDING_DIM", "768"))
+TEXT_EMBEDDING_CACHE_DIR = PROJECT_ROOT / "outputs" / "embedding_cache"
 
 # 把离散结构数值压到 0~1 的经验尺度。
 COMMENT_DEPTH_SCALE = 10.0
