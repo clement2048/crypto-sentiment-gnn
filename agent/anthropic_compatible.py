@@ -502,6 +502,9 @@ def _build_user_prompt(
             "t0": datetime_to_str(block.t0),
             "t_window": block.t_window,
             "root_comment": _comment_for_prompt(block.root_comment),
+            # Agent receives the root comment plus a bounded reply view. This is
+            # the LLM-readable side of the same CommentBlock that graph builders
+            # later convert into comment nodes.
             "replies": [_comment_for_prompt(reply) for reply in block.replies[:20]],
             "case_context_comments": [
                 _comment_for_prompt(comment)

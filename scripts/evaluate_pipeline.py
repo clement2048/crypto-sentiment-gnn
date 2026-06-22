@@ -97,6 +97,13 @@ def evaluate_pipeline(
 
 def compute_metrics(records: list[dict[str, object]]) -> EvaluationMetrics:
     """Compute binary accuracy, macro-F1, confusion matrix, and calibration metrics."""
+    # Metric flow:
+    # 1. Each record is produced by `run_full_pipeline`.
+    # 2. `_true_label(record)` reads the root-comment label from record["block"].
+    # 3. `_predicted_label(record)` converts the Judge verdict into 1/-1.
+    # 4. Class metrics are computed from those `(truth, prediction)` pairs.
+    # 5. Probability-style diagnostics read model/Judge confidence fields from
+    #    the same records; they do not rerun the model or Judge.
     pairs = [(_true_label(record), _predicted_label(record)) for record in records]
     total = len(pairs)
     correct = sum(1 for truth, pred in pairs if truth == pred)

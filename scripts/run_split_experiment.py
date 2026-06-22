@@ -1,4 +1,19 @@
-"""Run a small chronological train/val/test experiment."""
+"""Run a chronological train/val/test experiment.
+
+This script wraps the full pipeline in an experiment layout:
+
+1. Load all posts and build all `CommentBlock` samples.
+2. Sort blocks by `t0` and take the first `train + val + test` samples.
+3. Split in chronological order, not randomly.
+4. Build debate transcripts, hetero graphs, and graph tensors for every split.
+5. Train the graph model only on train tensors.
+6. Use the trained model to produce `model_summary` for train/val/test.
+7. Ask Judge for each sample and compute metrics on each split.
+
+The LLM debate outputs are generated before model training because they are part
+of the graph input. The train/val/test split controls which graph labels are
+used for gradient updates, not which samples are allowed to have debates.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +43,8 @@ from verification import verify_market_behavior
 
 @dataclass
 class ExperimentContext:
+    """One sample after every expensive upstream artifact has been built."""
+
     block: CommentBlock
     profiles: dict[str, object]
     transcript: DebateTranscript
@@ -50,23 +67,33 @@ def run_split_experiment(
     debate_client: DebateClient | None = None,
     judge_client: object | None = None,
 ) -> dict[str, Any]:
-    """按时间顺序运行 train/val/test 小实验。"""
+    """Run chronological split experiment and return serializable results."""
     if train_count <= 0 or val_count < 0 or test_count <= 0:
         raise ValueError("train_count and test_count must be positive; val_count can be zero")
 
     torch.manual_seed(seed)
     total_needed = train_count + val_count + test_count
+
+    # Stage 1: source JSONL -> CommentBlock samples. `issues` is retained in
+    # config output so data filtering can be audited alongside metrics.
     posts = load_posts(input_path)
     blocks, issues = build_comment_blocks(posts)
+
+    # Stage 2: chronological sample selection. Sorting by t0 keeps the
+    # experiment aligned with the time-safety assumption used by profiles.
     sorted_blocks = sorted(blocks, key=lambda item: item.t0)
     if len(sorted_blocks) < total_needed:
         raise ValueError(f"Need {total_needed} blocks, but only found {len(sorted_blocks)}")
     selected = sorted_blocks[:total_needed]
 
+    # Stage 3: chronological split. Train blocks are earlier than val/test
+    # blocks, so model fitting does not use future samples to predict past ones.
     train_blocks = selected[:train_count]
     val_blocks = selected[train_count : train_count + val_count]
     test_blocks = selected[train_count + val_count :]
 
+    # Stage 4: build all upstream artifacts. Debates and graphs are built for
+    # every selected sample, but only train_contexts are used in loss.backward().
     profile_store = ProfileStore.from_blocks(sorted_blocks)
     orchestrator = DebateOrchestrator(client=debate_client or create_debate_client(debate_mode))
     contexts = [
@@ -77,6 +104,7 @@ def run_split_experiment(
     val_contexts = contexts[train_count : train_count + val_count]
     test_contexts = contexts[train_count + val_count :]
 
+    # Stage 5: train the differentiable graph model on train tensors.
     model = GraphSentimentModel(input_dim=contexts[0].graph_tensor.x.shape[1])
     training = train_graph_model(
         model,
@@ -88,6 +116,9 @@ def run_split_experiment(
         ),
     )
 
+    # Stage 6: evaluate all splits with the same trained model and Judge. Each
+    # record includes enough artifacts for later metric computation or case
+    # inspection.
     judge = judge_client or create_judge_client(judge_mode)
     train_records = _records_for_contexts(model, judge, train_contexts)
     val_records = _records_for_contexts(model, judge, val_contexts)
@@ -185,6 +216,7 @@ def _build_context(
     rounds: int,
     embedding_backend: str | None,
 ) -> ExperimentContext:
+    """Build debate, graph, and tensor artifacts for one block."""
     profiles = profile_store.get_profiles_for_block(block)
     transcript = orchestrator.run(block, profiles, rounds=rounds)
     graph = build_hetero_graph(block, transcript)
@@ -202,6 +234,7 @@ def _records_for_contexts(
     judge,
     contexts: list[ExperimentContext],
 ) -> list[dict[str, object]]:
+    """Run model summary and Judge for already-built contexts."""
     records: list[dict[str, object]] = []
     for context in contexts:
         model_summary = model.summarize(context.graph_tensor)
@@ -276,4 +309,3 @@ def _print_metrics(split_name: str, metrics: dict[str, Any]) -> None:
 
 if __name__ == "__main__":
     main()
-

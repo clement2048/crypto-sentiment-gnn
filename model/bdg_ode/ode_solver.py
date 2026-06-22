@@ -1,7 +1,15 @@
-"""ODE solver helpers.
+"""ODE solver helpers for Bi-ODE state evolution.
 
-原 BDG-ODE 仓库使用 ``torchdiffeq.odeint`` 来做连续时间积分。
-这里默认也走 torchdiffeq；手写 Euler 只作为 fallback，方便在没有安装依赖时定位问题。
+The solver layer sits between `BDGODEFunc` and `GraphSentimentModel`:
+
+1. `GraphSentimentModel` prepares initial states `bull0`, `bear0`.
+2. The solver samples time points from 0 to `ODE_TERMINAL_TIME`.
+3. At each solver step, `_TorchDiffEqWrapper.forward(...)` calls
+   `BDGODEFunc` to get derivatives.
+4. The solver returns terminal states, and optionally the full sampled path.
+
+The terminal states feed graph readout. The sampled path feeds auxiliary losses
+such as smoothness.
 """
 
 from __future__ import annotations
@@ -23,7 +31,7 @@ from model.bdg_ode.dynamics import BDGODEFunc
 
 
 class _TorchDiffEqWrapper(nn.Module):
-    """把我们自己的 BDGODEFunc 包装成 torchdiffeq 需要的 f(t, y)。"""
+    """Adapt `BDGODEFunc` to torchdiffeq's `f(t, state)` interface."""
 
     def __init__(self, func: BDGODEFunc, relation_adjs: dict[str, torch.Tensor]):
         super().__init__()
@@ -53,7 +61,7 @@ def integrate_bdg_ode(
     use_adjoint: bool = ODE_USE_ADJOINT,
     backend: str = ODE_SOLVER_BACKEND,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """积分 BDG-ODE 状态，返回终止时刻的 bull/bear 状态。"""
+    """Integrate ODE states and return only terminal bull/bear states."""
     if backend == "torchdiffeq":
         return torchdiffeq_integrate(
             func=func,
@@ -93,7 +101,7 @@ def integrate_bdg_ode_path(
     use_adjoint: bool = ODE_USE_ADJOINT,
     backend: str = ODE_SOLVER_BACKEND,
 ) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
-    """Integrate BDG-ODE and return terminal states plus all sampled states."""
+    """Integrate ODE states and retain the sampled trajectory."""
     if backend == "torchdiffeq":
         return torchdiffeq_integrate_path(
             func=func,
@@ -131,7 +139,7 @@ def torchdiffeq_integrate(
     atol: float = ODE_ATOL,
     use_adjoint: bool = ODE_USE_ADJOINT,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """使用 torchdiffeq.odeint 对齐原 BDG-ODE 的 ODEBlock。"""
+    """Use torchdiffeq to produce terminal states."""
     try:
         from torchdiffeq import odeint, odeint_adjoint
     except ImportError as exc:
@@ -172,7 +180,7 @@ def torchdiffeq_integrate_path(
     atol: float = ODE_ATOL,
     use_adjoint: bool = ODE_USE_ADJOINT,
 ) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
-    """Use torchdiffeq and keep every sampled state for auxiliary losses."""
+    """Use torchdiffeq and keep sampled states for auxiliary losses."""
     try:
         from torchdiffeq import odeint, odeint_adjoint
     except ImportError as exc:
@@ -237,6 +245,5 @@ def euler_integrate_path(
         bull_path.append(bull)
         bear_path.append(bear)
     return bull, bear, bull_path, bear_path
-
 
 

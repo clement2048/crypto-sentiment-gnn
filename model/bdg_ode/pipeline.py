@@ -1,4 +1,31 @@
-"""End-to-end Bi-ODE graph sentiment model."""
+"""End-to-end Bi-ODE graph sentiment model.
+
+This module connects tensorized graphs to trainable predictions:
+
+1. Input from graph layer
+   `GraphTensor.x` is the node feature matrix and `relation_adjs` contains the
+   normalized graph operators for each relation.
+
+2. Dual initialization
+   `DualEmotionEncoder` maps each node feature row into two initial hidden
+   states: `bull0` and `bear0`.
+
+3. Continuous graph evolution
+   `integrate_bdg_ode_path` repeatedly calls `BDGODEFunc` to evolve the two
+   channels over graph structure. The result is terminal states `bull_t`,
+   `bear_t`, plus sampled paths for auxiliary losses.
+
+4. Graph readout
+   `DualReadout` pools terminal node states into one graph-level vector.
+
+5. Probability calibration
+   `VerdictCalibrator` maps that graph vector to `bullish_probability`.
+
+6. Judge-facing summary
+   `summarize(...)` converts internal tensors into a compact
+   `ModelOutputSummary` so the LLM Judge can use numeric model evidence without
+   seeing labels or future prices.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +46,15 @@ from model.model_summary import ModelOutputSummary
 
 @dataclass
 class GraphForwardDetails:
+    """Intermediate tensors returned during training.
+
+    Training losses need more than the final probability:
+    - `bull0/bear0` support initial-alignment losses;
+    - `bull_path/bear_path` support smoothness losses;
+    - `bull_t/bear_t` support mutual-exclusion and summary statistics;
+    - `polarity_seed` exposes the learned scalar initialization cue.
+    """
+
     probability: torch.Tensor
     graph_repr: torch.Tensor
     bull0: torch.Tensor
@@ -31,7 +67,7 @@ class GraphForwardDetails:
 
 
 class GraphSentimentModel(nn.Module):
-    """Root-comment graph classifier with bull/bear channels and Bi-ODE evolution."""
+    """Graph classifier with bull/bear channels and Bi-ODE evolution."""
 
     def __init__(
         self,
@@ -49,15 +85,27 @@ class GraphSentimentModel(nn.Module):
         self.calibrator = VerdictCalibrator(input_dim=hidden_dim * 5)
 
     def forward(self, graph: GraphTensor) -> torch.Tensor:
-        """Return bullish probability with shape (1,)."""
+        """Return bullish probability with shape `(1,)`."""
         return self.forward_details(graph).probability
 
     def forward_details(self, graph: GraphTensor) -> GraphForwardDetails:
-        """Return probability plus intermediate states for auxiliary training losses."""
+        """Run the full differentiable graph-model path.
+
+        Flow inside one forward pass:
+        graph tensor -> node feature matrix on model device -> dual encoder
+        -> ODE integration -> graph readout -> probability.
+        """
         device = next(self.parameters()).device
         x = graph.x.to(device)
         relation_adjs = {name: adj.to(device) for name, adj in graph.relation_adjs.items()}
+
+        # Encode static node features into the initial conditions of the two
+        # continuous-time channels.
         bull0, bear0, polarity_seed = self.encoder.forward_with_seed(x)
+
+        # Evolve bull/bear node states over the debate/comment graph. The path
+        # is retained so training can regularize the trajectory, not just the
+        # terminal probability.
         bull_t, bear_t, bull_path, bear_path = integrate_bdg_ode_path(
             self.ode_func,
             bull0,
@@ -65,6 +113,9 @@ class GraphSentimentModel(nn.Module):
             relation_adjs,
             steps=self.ode_steps,
         )
+
+        # Collapse node-level terminal states into one graph-level vector and
+        # map it to a calibrated bullish probability.
         graph_repr = self.readout(bull_t, bear_t)
         probability = self.calibrator(graph_repr)
         return GraphForwardDetails(
@@ -95,7 +146,12 @@ class GraphSentimentModel(nn.Module):
 
     @torch.no_grad()
     def summarize(self, graph: GraphTensor) -> ModelOutputSummary:
-        """Create the structured model summary consumed by the LLM judge."""
+        """Create the structured model summary consumed by the LLM Judge.
+
+        This method intentionally exports only model-derived diagnostics:
+        probability, channel means/maxima, bull-bear margins, and relation count.
+        It does not expose `graph.label`, `p1`, or any future market value.
+        """
         bull_t, bear_t = self.forward_states(graph)
         graph_repr = self.readout(bull_t, bear_t)
         prob = float(self.calibrator(graph_repr))

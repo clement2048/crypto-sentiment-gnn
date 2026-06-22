@@ -1,7 +1,37 @@
-"""简化版双 agent 辩论编排器。
+"""Debate orchestration: CommentBlock + profiles -> DebateTranscript.
 
-当前主流程只保留一个正方 agent 和一个反方 agent。旧的多角色闭环辩论
-已经归档到 ``archive/multiagent/``。
+This module sits between the data/profile layer and the graph/model layer.
+Its job is not to judge the sample; it only asks the bull and bear LLM agents
+to produce structured `Argument` objects.
+
+Per-sample data flow:
+
+1. Input from upstream
+   - `CommentBlock`: post text, root comment, replies, product, t0.
+   - `profiles`: time-safe user profiles for authors in the block.
+   - `rounds`: maximum outer debate rounds.
+
+2. Round execution
+   Each round generates at most two arguments:
+   - bull argument, `seq=1`;
+   - bear argument, `seq=2`, usually targeting the current bull argument.
+   Later bull arguments target the latest bear argument.
+
+3. LLM client boundary
+   `_generate(...)` delegates actual text generation to `DebateClient`.
+   Provider-specific clients convert the block/profile/prior-argument objects
+   into JSON prompts and parse the LLM response back into `Argument`.
+
+4. Metadata normalization
+   The orchestrator fixes phase and `t_index` after generation. This keeps the
+   graph time axis stable even if the LLM returns slightly inconsistent fields.
+
+5. Output to downstream
+   The final `DebateTranscript` is consumed by:
+   - `build_debate_graph(...)`, which turns `target_args` into `interact` edges;
+   - Judge clients, which read claims/evidence/targets as raw debate logic;
+   - optional reflection loops, which append more arguments without deleting
+     earlier ones.
 """
 
 from __future__ import annotations
@@ -19,7 +49,7 @@ CAMPS: tuple[Camp, ...] = ("bull", "bear")
 
 
 class DebateOrchestrator:
-    """将一个 CommentBlock 和用户画像转换成双 agent DebateTranscript。"""
+    """Convert one sample and its profiles into a structured debate transcript."""
 
     def __init__(
         self,
@@ -37,16 +67,24 @@ class DebateOrchestrator:
         reflection_signal: ReflectionSignal | None = None,
         reflection_rounds: int = 0,
     ) -> DebateTranscript:
-        """运行正方/反方双 agent 辩论。
+        """Run the initial bull/bear debate.
 
-        每轮只生成两条论点：
-        1. ``bull_agent`` 给出看涨论点，首轮不回应任何目标，后续回应上一轮反方。
-        2. ``bear_agent`` 给出看跌论点，并回应当前轮正方论点。
+        Output growth pattern:
+        - round 1:
+          bull has no prior bear target, so it opens the debate;
+          bear responds to that bull argument.
+        - round >= 2:
+          bull responds to the latest bear argument;
+          bear responds to the current bull argument.
 
-        这样每个样本的论点数为 ``rounds * 2``，便于阅读和控制 API 成本。
+        The transcript stores arguments in chronological generation order. This
+        ordering is later used by graph construction and by the LLM Judge.
         """
         arguments: list[Argument] = []
         for round_index in range(1, rounds + 1):
+            # Bull reads all prior arguments but is only allowed to target the
+            # latest bear-side argument. The allowed target list is passed to
+            # the LLM prompt and enforced again after parsing by provider code.
             bull_targets = _latest_argument_ids(arguments, camp="bear", limit=1)
             bull = self._generate(
                 block=block,
@@ -61,6 +99,9 @@ class DebateOrchestrator:
             )
             arguments.append(bull)
 
+            # Bear sees the newly generated bull argument in prior_arguments and
+            # targets it directly. This gives every normal round a simple
+            # bull -> bear local interaction that can become an `interact` edge.
             bear = self._generate(
                 block=block,
                 profiles=profiles,
@@ -74,9 +115,15 @@ class DebateOrchestrator:
             )
             arguments.append(bear)
 
+            # Early stop is intentionally conservative. It only stops when both
+            # latest arguments have no targets, meaning the LLM produced no
+            # actionable interaction for this round.
             if _debate_converged(arguments):
                 break
 
+        # This optional path is mostly kept for callers that want to start a
+        # debate with a known reflection signal. The main full pipeline usually
+        # runs initial debate first, asks Judge, then calls add_reflection_rounds.
         if reflection_signal is not None and should_continue_reflection(reflection_signal):
             extra_rounds = min(max(reflection_rounds, 0), REFLECTION_MAX_ROUNDS)
             for offset in range(extra_rounds):
@@ -100,7 +147,16 @@ class DebateOrchestrator:
         signal: ReflectionSignal,
         reflection_rounds: int = 1,
     ) -> DebateTranscript:
-        """Append debater reflection supplements without regenerating earlier debate turns."""
+        """Append reflection supplements to an existing transcript.
+
+        Data flow:
+        existing transcript + safe reflection signal
+        -> one or more bull/bear supplement pairs
+        -> new transcript with old arguments preserved.
+
+        Earlier arguments are not regenerated because they may already be used
+        in cached graph/model/Judge artifacts or human case-study reports.
+        """
         if reflection_rounds <= 0 or not should_continue_reflection(signal):
             return transcript
         arguments = list(transcript.arguments)
@@ -132,6 +188,14 @@ class DebateOrchestrator:
         phase: str,
         available_target_ids: list[str],
     ) -> Argument:
+        # This is the single gateway from orchestrator state to provider-specific
+        # LLM generation. The caller supplies:
+        # - current sample (`block`);
+        # - time-safe profiles;
+        # - all prior arguments visible to this agent;
+        # - a bounded list of legal target argument ids.
+        # The provider returns an `Argument`; metadata is then overwritten below
+        # so downstream graph construction receives stable ids/time fields.
         argument = self.client.generate_argument(
             block=block,
             profiles=profiles,
@@ -155,8 +219,14 @@ class DebateOrchestrator:
         round_index: int,
         signal: ReflectionSignal,
     ) -> list[Argument]:
-        """按 v3 反思机制追加补充论证；LLM 不接收真实 label，只接收弱项反馈。"""
+        """Generate one bull/bear supplement pair for Judge-guided reflection."""
+        # The phase string carries a compact description of the weakness that
+        # triggered reflection. It becomes node metadata later, but it is not a
+        # label and it does not contain future price information.
         phase = f"reflection_supplement:{','.join(signal.weak_dims[:3]) or 'general'}"
+
+        # Bull supplement usually repairs or expands the bull side while looking
+        # at the latest bear-side pressure points.
         bull_targets = _latest_argument_ids(arguments, camp="bear", limit=2)
         bull = self._generate(
             block=block,
@@ -169,6 +239,10 @@ class DebateOrchestrator:
             phase=phase,
             available_target_ids=bull_targets,
         )
+
+        # Bear supplement then responds to the new bull supplement and optionally
+        # the previous bull argument. This keeps reflection graph growth connected
+        # to existing debate chains rather than creating isolated nodes.
         bear = self._generate(
             block=block,
             profiles=profiles,
@@ -184,10 +258,12 @@ class DebateOrchestrator:
 
 
 def _latest_argument_ids(arguments: list[Argument], camp: Camp, limit: int) -> list[str]:
+    """Return recent argument ids for one camp, preserving chronological order."""
     return [argument.argument_id for argument in arguments if argument.camp == camp][-limit:]
 
 
 def _argument_time(argument: Argument, max_seq: int) -> float:
+    """Map discrete round/seq to a continuous debate-time coordinate."""
     return float(argument.round - 1) + float(argument.seq - 1) / max(max_seq, 1)
 
 

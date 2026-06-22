@@ -1,7 +1,17 @@
-"""把原始帖子拆成 CommentBlock 样本。
+"""Convert source posts into model samples.
 
-一个 CommentBlock = 一个根评论 + 它下面的所有 replies。
-这是 v2 设计里的核心样本粒度：后续画像、辩论、图模型、训练标签都围绕它展开。
+Data flow in this module:
+
+1. `load_posts(...)` has already parsed JSONL rows into `PostRecord` objects.
+   Each post still contains many root comments.
+2. `build_comment_blocks(...)` splits every valid root comment into one
+   `CommentBlock` sample.
+3. One `CommentBlock` carries the post text, the root comment, its replies,
+   market metadata, and the root-level `t0/p0/p1/label` fields supplied by the
+   dataset.
+4. Downstream modules treat `CommentBlock` as the common sample object:
+   profiles are built for its participants, agents debate over its text, graph
+   builders turn it into comment nodes, and training uses its label.
 """
 
 from __future__ import annotations
@@ -9,9 +19,6 @@ from __future__ import annotations
 from data.filters import post_level_issue, validate_root_comment
 from data.schema import CommentBlock, FilterIssue, PostRecord
 
-# ✅已检查
-
-# 构建评论块
 def build_comment_blocks(posts: list[PostRecord]) -> tuple[list[CommentBlock], list[FilterIssue]]:
     """将 PostRecord 列表转换成 CommentBlock 列表。
 
@@ -30,7 +37,8 @@ def build_comment_blocks(posts: list[PostRecord]) -> tuple[list[CommentBlock], l
             continue
 
         for root_comment in post.comments:
-            # 只校验根评论，因为根评论的 t0/p0/p1/label 决定这个 block 的监督标签。
+            # This stage only validates and forwards existing root-level
+            # supervision fields. It does not recompute price-window labels.
             root_issues = validate_root_comment(post, root_comment)
             if root_issues:
                 issues.extend(root_issues)
@@ -67,6 +75,4 @@ def build_comment_blocks(posts: list[PostRecord]) -> tuple[list[CommentBlock], l
             )
 
     return blocks, issues
-
-
 

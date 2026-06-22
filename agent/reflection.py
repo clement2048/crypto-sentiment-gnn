@@ -1,7 +1,20 @@
-"""Reflection signals for the v3 debater-reflection loop.
+"""Reflection signal objects for the Judge-guided debate loop.
 
-The reflection signal is derived from judge reports and model confidence only.
-It must not include ground-truth labels, p1, or future prices.
+Reflection is the feedback bridge from Judge back to debaters:
+
+1. Judge reads the debate transcript, graph, and model summary.
+2. Judge outputs a structured report with confidence, weak dimensions, and
+   supplement suggestions.
+3. `reflection_signal_from_judge(...)` in `judge/report_parser.py` converts
+   that Judge output into `ReflectionSignal`.
+4. `should_continue_reflection(...)` decides whether the current debate needs
+   more argument supplements.
+5. `DebateOrchestrator.add_reflection_rounds(...)` uses the signal to append
+   bull/bear supplement arguments.
+
+The signal is deliberately limited. It can describe weak reasoning dimensions,
+low confidence, or model/Judge uncertainty, but it must not include
+ground-truth labels, p1, or future prices.
 """
 
 from __future__ import annotations
@@ -17,6 +30,18 @@ from config import (
 
 @dataclass
 class ReflectionSignal:
+    """Safe, LLM-facing feedback distilled from Judge output.
+
+    Fields:
+    - `verdict`: previous Judge verdict. It is useful for bookkeeping, but
+      debaters should not treat it as ground truth.
+    - `confidence`: Judge confidence in that verdict.
+    - `weak_dims`: dimensions that need stronger evidence or rebuttal.
+    - `supplement_suggestions`: natural-language repair hints.
+    - `ode_margin`: optional graph-model margin used as an uncertainty signal.
+    - `mean_argument_confidence`: optional debate-strength signal.
+    """
+
     verdict: str = "BULLISH"
     confidence: float = 0.0
     weak_dims: list[str] = field(default_factory=list)
@@ -36,9 +61,13 @@ class ReflectionSignal:
 
 
 def should_continue_reflection(signal: ReflectionSignal) -> bool:
-    """Return True when the judge report indicates weak or uncertain debate."""
+    """Return True when the debate should receive another supplement round."""
+    # Low Judge confidence means the current transcript/model evidence is not
+    # decisive enough, so the next bull/bear pair may add useful information.
     if signal.confidence < REFLECTION_CONFIDENCE_THRESHOLD:
         return True
+    # Even with acceptable confidence, many weak dimensions indicate the report
+    # found multiple evidence or reasoning gaps worth repairing.
     return len(signal.weak_dims) >= REFLECTION_MIN_WEAK_DIMS
 
 
