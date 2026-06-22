@@ -51,3 +51,7 @@ tb_logs/
 .coverage
 htmlcov/
 .tox/
+
+# Experiment outputs and model caches
+outputs/
+output/

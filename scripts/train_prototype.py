@@ -43,6 +43,8 @@ def build_training_tensors(
         profiles = profile_store.get_profiles_for_block(block)
         transcript = orchestrator.run(block, profiles, rounds=rounds)
         graph = build_hetero_graph(block, transcript)
+        # Text embeddings are only appended to the graph tensor consumed by
+        # Bi-ODE; the debate agents still receive raw textual evidence.
         tensors.append(graph_to_tensor(graph, label=block.label, embedding_backend=embedding_backend))
     return tensors
 

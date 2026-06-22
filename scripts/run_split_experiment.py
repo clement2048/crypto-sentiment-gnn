@@ -135,6 +135,8 @@ def run_split_experiment(
             "learning_rate": learning_rate,
             "debate_mode": debate_mode,
             "judge_mode": judge_mode,
+            "embedding_backend": embedding_backend or "none",
+            "node_feature_dim": int(contexts[0].graph_tensor.x.shape[1]),
             "seed": seed,
             "filter_issues": len(issues),
             "selected_time_range": {
@@ -220,6 +222,8 @@ def _build_context(
     profiles = profile_store.get_profiles_for_block(block)
     transcript = orchestrator.run(block, profiles, rounds=rounds)
     graph = build_hetero_graph(block, transcript)
+    # Text embeddings are applied only here: after the agent debate is complete,
+    # when the graph is tensorized for Bi-ODE. The agents never receive vectors.
     return ExperimentContext(
         block=block,
         profiles=profiles,

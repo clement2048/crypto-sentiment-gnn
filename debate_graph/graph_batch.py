@@ -1,8 +1,8 @@
-"""Tensorize v3 single-relation heterogeneous graphs.
+"""Tensorize v3 single-relation heterogeneous graphs for Bi-ODE.
 
-Current node features are deterministic structural/text proxy features. Real
-Sentence-BERT embeddings can replace the text proxy after the embedding model
-and cache policy are fixed.
+Bull/bear agents receive raw news, comments, and profile text. Optional text
+embeddings are appended only when converting the finished debate graph into
+node features for the graph ODE model.
 """
 
 from __future__ import annotations

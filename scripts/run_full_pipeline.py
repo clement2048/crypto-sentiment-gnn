@@ -203,6 +203,8 @@ def run_full_pipeline(
                 reflection_rounds=1,
             )
             context.graph = build_hetero_graph(context.block, context.transcript)
+            # Text embeddings are applied only when tensorizing the finished
+            # debate graph for Bi-ODE; agent prompts stay raw text based.
             context.graph_tensor = graph_to_tensor(
                 context.graph,
                 label=context.block.label,
@@ -322,8 +324,13 @@ def _build_contexts(
         profiles = profile_store.get_profiles_for_block(block)
         transcript = orchestrator.run(block, profiles, rounds=rounds)
         graph = build_hetero_graph(block, transcript)
+<<<<<<< Updated upstream
         # Tensorization is the handoff from symbolic/LLM artifacts to PyTorch.
         # The label is attached here for model training, not for LLM prompting.
+=======
+        # The optional embedding backend affects only this graph tensor for
+        # Bi-ODE. It is not part of the bull/bear agent input.
+>>>>>>> Stashed changes
         contexts.append(
             PipelineContext(
                 block=block,
