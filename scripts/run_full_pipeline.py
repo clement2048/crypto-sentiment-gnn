@@ -38,8 +38,7 @@ This module is the clearest place to understand the end-to-end data flow:
    - node texts/attrs become node feature matrix `x`;
    - normalized `interact` adjacency becomes `relation_adjs`;
    - `CommentBlock.label` becomes graph-level tensor label when training.
-   Optional text embeddings can be appended here, but the default path remains
-   the structural 12-feature representation.
+   Text embeddings become the node feature matrix consumed by Bi-ODE.
 
 7. Optional graph-model training
    If `train_epochs > 0`, `train_graph_model(...)` trains `GraphSentimentModel`
@@ -153,7 +152,9 @@ def run_full_pipeline(
         orchestrator=orchestrator,
         embedding_backend=embedding_backend,
     )
-    model = GraphSentimentModel(input_dim=_graph_input_dim(contexts))
+    if not contexts:
+        raise ValueError("No graph contexts available")
+    model = GraphSentimentModel(input_dim=int(contexts[0].graph_tensor.x.shape[1]))
     training_summary: dict[str, object] | None = None
 
     # Optional training stage. The tensors already contain labels, but those
@@ -251,13 +252,13 @@ def main() -> None:
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     parser.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
-    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    parser.add_argument("--debate-mode", choices=["siliconflow"], default="siliconflow")
+    parser.add_argument("--judge-mode", choices=["siliconflow"], default="siliconflow")
     parser.add_argument("--reflection-rounds", type=int, default=0)
     parser.add_argument(
         "--embedding-backend",
         choices=["none", "sentencebert", "finbert", "sentencebert_finbert"],
-        default=None,
+        default="sentencebert",
     )
     parser.add_argument("--output-jsonl", type=str, default=None)
     args = parser.parse_args()
@@ -324,13 +325,9 @@ def _build_contexts(
         profiles = profile_store.get_profiles_for_block(block)
         transcript = orchestrator.run(block, profiles, rounds=rounds)
         graph = build_hetero_graph(block, transcript)
-<<<<<<< Updated upstream
-        # Tensorization is the handoff from symbolic/LLM artifacts to PyTorch.
-        # The label is attached here for model training, not for LLM prompting.
-=======
-        # The optional embedding backend affects only this graph tensor for
-        # Bi-ODE. It is not part of the bull/bear agent input.
->>>>>>> Stashed changes
+        # Tensorization is the handoff from LLM artifacts to PyTorch/Bi-ODE.
+        # The optional embedding backend affects only this graph tensor; labels
+        # are attached for training and are never sent to bull/bear agents.
         contexts.append(
             PipelineContext(
                 block=block,
@@ -341,13 +338,6 @@ def _build_contexts(
             )
         )
     return contexts
-
-
-def _graph_input_dim(contexts: list[PipelineContext]) -> int:
-    if not contexts:
-        raise ValueError("No graph contexts available")
-    return int(contexts[0].graph_tensor.x.shape[1])
-
 
 def _mean_argument_confidence(transcript: DebateTranscript) -> float | None:
     values = [argument.confidence for argument in transcript.arguments]

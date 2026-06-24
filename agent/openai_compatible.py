@@ -1,17 +1,4 @@
-"""OpenAI-compatible LLM clients (debate + judge).
-
-合并自原 agent/bailian_client.py 与 judge/bailian_judge_client.py,为
-阿里云百炼等所有走 OpenAI Chat Completions 兼容协议的 provider 提供共享
-HTTP 层。每个 provider 只需要写一层 ~10 行的"薄配置"。
-
-API key 加载优先级(每一项依次尝试):
-1. 调用方传入的 ``api_key`` 参数
-2. ``api_key_env``:若值以 ``sk-`` 开头则视为真实 key,否则视为 env 变量名
-3. ``fallback_api_key_env``:同上
-4. 项目根目录的 ``.env`` 文件
-
-注意:不引入 ``openai`` Python SDK,沿用项目惯例手写 ``urllib``。
-"""
+"""SiliconFlow OpenAI-compatible clients for debate and judge."""
 
 from __future__ import annotations
 
@@ -19,7 +6,6 @@ import copy
 import hashlib
 import http.client
 import json
-import os
 from pathlib import Path
 import socket
 import ssl
@@ -28,26 +14,12 @@ import urllib.error
 import urllib.request
 from typing import Any, Callable
 
-from agent.anthropic_compatible import (
-    _extract_text,  # 复用:fallback 兼容响应也走同一解析
-    _load_api_key,  # 复用:env 加载逻辑与 anthropic 一族一致
-)
 from agent.output_parser import parse_argument_json
+from agent.payloads import build_user_prompt, normalize_argument_metadata
 from agent.prompts import get_agent_system_prompt
-from agent.schema import Argument, Camp
+from agent.schema import Argument, Camp, DebateTranscript
 from config import (
-    BAILIAN_API_KEY_ENV,
-    BAILIAN_CACHE_DIR,
-    BAILIAN_CACHE_ENABLED,
-    BAILIAN_ENABLE_THINKING,
-    BAILIAN_HTTP_RETRIES,
-    BAILIAN_MAX_TOKENS,
-    BAILIAN_MODEL,
-    BAILIAN_OPENAI_BASE_URL,
-    BAILIAN_TEMPERATURE,
-    BAILIAN_TIMEOUT_SECONDS,
-    PROJECT_ROOT,
-    SILICONFLOW_API_KEY_ENV,
+    SILICONFLOW_API_KEY,
     SILICONFLOW_CACHE_DIR,
     SILICONFLOW_CACHE_ENABLED,
     SILICONFLOW_ENABLE_THINKING,
@@ -59,46 +31,31 @@ from config import (
     SILICONFLOW_TIMEOUT_SECONDS,
 )
 from data.schema import CommentBlock
+from debate_graph.schema import HeteroGraph
+from model.model_summary import ModelOutputSummary
 from profiles.user_profile import UserProfile
 
-# Judge 端 import 故意留在函数内部 lazy import,避免与 judge/__init__.py
-# 形成循环。详见 agent/anthropic_compatible.py 顶部同名注释。
-
-
 Transport = Callable[[dict[str, Any]], dict[str, Any]]
-DEFAULT_BAILIAN_API_KEY_ENV_NAME = "DASHSCOPE_API_KEY"
-DEFAULT_SILICONFLOW_API_KEY_ENV_NAME = "SILICONFLOW_API_KEY"
 
 
-# =============================================================================
-# Debate 基类
-# =============================================================================
-
-
-class OpenAICompatibleDebateClient:
-    """所有 OpenAI Chat Completions 兼容 provider 的共享 HTTP 层。
-
-    子类(具体 provider)只需要传 ``base_url`` / ``model`` / ``api_key_env`` /
-    ``cache_dir`` 等常量。
-    """
+class SiliconFlowOpenAICompatibleDebateClient:
+    """Debate client for SiliconFlow's OpenAI-compatible chat endpoint."""
 
     def __init__(
         self,
-        api_key: str | None,
-        base_url: str,
-        model: str,
-        max_tokens: int,
-        temperature: float,
-        enable_thinking: bool,
-        timeout_seconds: float,
-        http_retries: int,
-        cache_enabled: bool,
-        cache_dir: str | Path,
-        api_key_env: str,
-        fallback_api_key_env: str | None,
-        transport: Transport | None,
+        api_key: str | None = None,
+        transport: Transport | None = None,
+        base_url: str = SILICONFLOW_OPENAI_BASE_URL,
+        model: str = SILICONFLOW_MODEL,
+        max_tokens: int = SILICONFLOW_MAX_TOKENS,
+        temperature: float = SILICONFLOW_TEMPERATURE,
+        enable_thinking: bool = SILICONFLOW_ENABLE_THINKING,
+        timeout_seconds: float = SILICONFLOW_TIMEOUT_SECONDS,
+        http_retries: int = SILICONFLOW_HTTP_RETRIES,
+        cache_enabled: bool = SILICONFLOW_CACHE_ENABLED,
+        cache_dir: str | Path = SILICONFLOW_CACHE_DIR,
     ):
-        self.api_key = api_key or _load_api_key(api_key_env, fallback_api_key_env)
+        self.api_key = api_key or SILICONFLOW_API_KEY
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.max_tokens = max_tokens
@@ -108,8 +65,6 @@ class OpenAICompatibleDebateClient:
         self.http_retries = http_retries
         self.cache_enabled = cache_enabled
         self.cache_dir = Path(cache_dir)
-        self.api_key_env = api_key_env
-        self.fallback_api_key_env = fallback_api_key_env
         self.transport = transport
 
     def generate_argument(
@@ -124,13 +79,9 @@ class OpenAICompatibleDebateClient:
         phase: str = "initial_argument",
         available_target_ids: list[str] | None = None,
     ) -> Argument:
-        """调用 OpenAI-compatible API,把响应解析成 Argument。"""
-        # prompt 拼装复用 anthropic_compatible 的 helper(协议无关)
-        from agent.anthropic_compatible import _build_user_prompt, _normalize_argument_metadata
-
         expected_argument_id = f"{block.block_id}:r{round_index}:s{seq}:{camp}"
         expected_agent_id = f"{camp}_{role}"
-        user_prompt = _build_user_prompt(
+        user_prompt = build_user_prompt(
             block=block,
             profiles=profiles,
             camp=camp,
@@ -143,11 +94,7 @@ class OpenAICompatibleDebateClient:
             expected_argument_id=expected_argument_id,
             expected_agent_id=expected_agent_id,
         )
-        payload = self._build_payload(
-            user_prompt=user_prompt,
-            camp=camp,
-            role=role,
-        )
+        payload = self._build_payload(user_prompt=user_prompt, role=role)
         response = self._send_payload(payload)
         text = _extract_openai_text(response)
         try:
@@ -166,7 +113,7 @@ class OpenAICompatibleDebateClient:
             )
             repair_response = self._send_payload(repair_payload)
             argument = parse_argument_json(_extract_openai_text(repair_response))
-        return _normalize_argument_metadata(
+        return normalize_argument_metadata(
             argument=argument,
             expected_argument_id=expected_argument_id,
             expected_agent_id=expected_agent_id,
@@ -178,18 +125,17 @@ class OpenAICompatibleDebateClient:
             available_target_ids=available_target_ids,
         )
 
-    def _build_payload(self, user_prompt: str, camp: Camp, role: str) -> dict[str, Any]:
-        payload: dict[str, Any] = {
+    def _build_payload(self, user_prompt: str, role: str) -> dict[str, Any]:
+        return {
             "model": self.model,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
             "enable_thinking": self.enable_thinking,
             "messages": [
-                {"role": "system", "content": get_agent_system_prompt(camp, role)},
+                {"role": "system", "content": get_agent_system_prompt(role)},
                 {"role": "user", "content": user_prompt},
             ],
         }
-        return payload
 
     def _build_repair_payload(
         self,
@@ -233,12 +179,7 @@ class OpenAICompatibleDebateClient:
 
     def _post_chat_completions(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.api_key:
-            raise ValueError(
-                f"Missing OpenAI-compatible API key. "
-                f"Set {self.api_key_env}"
-                + (f" or {self.fallback_api_key_env}" if self.fallback_api_key_env else "")
-                + " in your environment or .env file."
-            )
+            raise ValueError("Missing SiliconFlow API key. Set SILICONFLOW_API_KEY in your .env file.")
 
         request = urllib.request.Request(
             url=f"{self.base_url}/chat/completions",
@@ -258,55 +199,43 @@ class OpenAICompatibleDebateClient:
             except urllib.error.HTTPError as exc:
                 body = exc.read().decode("utf-8", errors="replace")
                 if exc.code < 500 or attempt == self.http_retries:
-                    raise RuntimeError(f"OpenAI-compatible API HTTP {exc.code}: {body}") from exc
+                    raise RuntimeError(f"SiliconFlow API HTTP {exc.code}: {body}") from exc
                 last_error = exc
             except urllib.error.URLError as exc:
                 if attempt == self.http_retries:
-                    raise RuntimeError(
-                        f"OpenAI-compatible API request failed after {self.http_retries} attempts: {exc}"
-                    ) from exc
+                    raise RuntimeError(f"SiliconFlow API request failed after {self.http_retries} attempts: {exc}") from exc
                 last_error = exc
             except (TimeoutError, socket.timeout) as exc:
                 if attempt == self.http_retries:
-                    raise RuntimeError(
-                        f"OpenAI-compatible API timed out after {self.http_retries} attempts: {exc}"
-                    ) from exc
+                    raise RuntimeError(f"SiliconFlow API timed out after {self.http_retries} attempts: {exc}") from exc
                 last_error = exc
             except (http.client.IncompleteRead, http.client.RemoteDisconnected, ConnectionResetError, ssl.SSLError) as exc:
                 if attempt == self.http_retries:
-                    raise RuntimeError(
-                        f"OpenAI-compatible API connection closed after {self.http_retries} attempts: {exc}"
-                    ) from exc
+                    raise RuntimeError(f"SiliconFlow API connection closed after {self.http_retries} attempts: {exc}") from exc
                 last_error = exc
             time.sleep(0.8 * attempt)
         else:
-            raise RuntimeError(f"OpenAI-compatible API request failed: {last_error}")
+            raise RuntimeError(f"SiliconFlow API request failed: {last_error}")
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):
-            raise ValueError("OpenAI-compatible response must be a JSON object")
+            raise ValueError("SiliconFlow response must be a JSON object")
         if "error" in parsed:
-            raise RuntimeError(f"OpenAI-compatible API error: {parsed['error']}")
+            raise RuntimeError(f"SiliconFlow API error: {parsed['error']}")
         return parsed
 
 
-# =============================================================================
-# Judge 基类
-# =============================================================================
+class SiliconFlowJudgeClient:
+    """Judge client backed by the same SiliconFlow chat endpoint."""
 
-
-class OpenAICompatibleJudgeClient:
-    """所有 OpenAI 兼容 provider 的共享 judge 层。"""
-
-    def __init__(self, http_client: OpenAICompatibleDebateClient):
-        self.http = http_client
+    def __init__(self, transport: Transport | None = None, **overrides: Any):
+        self.http = SiliconFlowOpenAICompatibleDebateClient(transport=transport, **overrides)
 
     def judge(
         self,
         transcript: DebateTranscript,
         model_summary: ModelOutputSummary,
         graph: HeteroGraph,
-    ) -> JudgeOutput:
-        # lazy import 避免循环,见 agent/anthropic_compatible.py 注释
+    ):
         from judge.consistency import check_judge_consistency
         from judge.judge_parser import parse_judge_json
 
@@ -328,7 +257,6 @@ class OpenAICompatibleJudgeClient:
         model_summary: ModelOutputSummary,
         graph: HeteroGraph,
     ) -> dict[str, Any]:
-        # lazy import 避免循环
         from judge.judge_prompt import JUDGE_OUTPUT_SCHEMA_PROMPT
 
         return {
@@ -360,110 +288,12 @@ class OpenAICompatibleJudgeClient:
                 "content": (
                     "The previous response was not a valid JudgeOutput JSON object. "
                     "Repair it into exactly one valid JSON object with verdict, confidence, "
-                    "report, score_vector, and consistency_flags. Return only JSON."
-                    " The verdict must be exactly BULLISH or BEARISH."
+                    "report, score_vector, and consistency_flags. Return only JSON. "
+                    "The verdict must be exactly BULLISH or BEARISH."
                 ),
             },
         ]
         return payload
-
-
-# =============================================================================
-# Provider 薄配置:Bailian(阿里云百炼)
-# =============================================================================
-
-
-class BailianOpenAICompatibleDebateClient(OpenAICompatibleDebateClient):
-    """阿里云百炼 OpenAI 兼容接口辩论 client(薄配置)。
-
-    默认读取环境变量 ``DASHSCOPE_API_KEY``,默认模型为 ``deepseek-v4-flash``。
-    """
-
-    def __init__(
-        self,
-        api_key: str | None = None,
-        transport: Transport | None = None,
-        **overrides: Any,
-    ):
-        super().__init__(
-            api_key=api_key,
-            base_url=BAILIAN_OPENAI_BASE_URL,
-            model=BAILIAN_MODEL,
-            max_tokens=BAILIAN_MAX_TOKENS,
-            temperature=BAILIAN_TEMPERATURE,
-            enable_thinking=BAILIAN_ENABLE_THINKING,
-            timeout_seconds=BAILIAN_TIMEOUT_SECONDS,
-            http_retries=BAILIAN_HTTP_RETRIES,
-            cache_enabled=BAILIAN_CACHE_ENABLED,
-            cache_dir=BAILIAN_CACHE_DIR,
-            api_key_env=BAILIAN_API_KEY_ENV,
-            fallback_api_key_env=DEFAULT_BAILIAN_API_KEY_ENV_NAME,
-            transport=transport,
-            **overrides,
-        )
-
-
-class BailianJudgeClient(OpenAICompatibleJudgeClient):
-    """阿里云百炼 OpenAI 兼容接口法官 client(薄配置)。"""
-
-    def __init__(
-        self,
-        transport: Transport | None = None,
-        **overrides: Any,
-    ):
-        super().__init__(
-            http_client=BailianOpenAICompatibleDebateClient(transport=transport, **overrides)
-        )
-
-
-# =============================================================================
-# Provider 薄配置:SiliconFlow(硅基流动)
-# =============================================================================
-
-
-class SiliconFlowOpenAICompatibleDebateClient(OpenAICompatibleDebateClient):
-    """硅基流动 OpenAI 兼容接口辩论 client(薄配置)。"""
-
-    def __init__(
-        self,
-        api_key: str | None = None,
-        transport: Transport | None = None,
-        **overrides: Any,
-    ):
-        super().__init__(
-            api_key=api_key,
-            base_url=SILICONFLOW_OPENAI_BASE_URL,
-            model=SILICONFLOW_MODEL,
-            max_tokens=SILICONFLOW_MAX_TOKENS,
-            temperature=SILICONFLOW_TEMPERATURE,
-            enable_thinking=SILICONFLOW_ENABLE_THINKING,
-            timeout_seconds=SILICONFLOW_TIMEOUT_SECONDS,
-            http_retries=SILICONFLOW_HTTP_RETRIES,
-            cache_enabled=SILICONFLOW_CACHE_ENABLED,
-            cache_dir=SILICONFLOW_CACHE_DIR,
-            api_key_env=SILICONFLOW_API_KEY_ENV,
-            fallback_api_key_env=DEFAULT_SILICONFLOW_API_KEY_ENV_NAME,
-            transport=transport,
-            **overrides,
-        )
-
-
-class SiliconFlowJudgeClient(OpenAICompatibleJudgeClient):
-    """硅基流动 OpenAI 兼容接口法官 client(薄配置)。"""
-
-    def __init__(
-        self,
-        transport: Transport | None = None,
-        **overrides: Any,
-    ):
-        super().__init__(
-            http_client=SiliconFlowOpenAICompatibleDebateClient(transport=transport, **overrides)
-        )
-
-
-# =============================================================================
-# 模块级 helper(OpenAI 响应解析、缓存)
-# =============================================================================
 
 
 def _extract_openai_text(response: dict[str, Any]) -> str:
@@ -476,7 +306,7 @@ def _extract_openai_text(response: dict[str, Any]) -> str:
                 return message["content"]
             if isinstance(first.get("text"), str):
                 return first["text"]
-    raise ValueError(f"OpenAI-compatible response missing choices[0].message.content: {sorted(response.keys())}")
+    raise ValueError(f"SiliconFlow response missing choices[0].message.content: {sorted(response.keys())}")
 
 
 def _read_cached_response(
@@ -518,7 +348,6 @@ def _judge_input(
     model_summary: ModelOutputSummary,
     graph: HeteroGraph,
 ) -> dict[str, Any]:
-    """给法官的输入视图：不包含真实 label、p1 等未来验证字段。"""
     return {
         "task": "Produce final JudgeOutput after comparing debate graph and Bi-ODE/model summary.",
         "block_id": transcript.block_id,

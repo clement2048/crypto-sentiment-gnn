@@ -147,7 +147,7 @@ def _write_arguments(path: Path, data: dict[str, Any]) -> None:
                     "role": argument.get("role"),
                     "agent_id": argument.get("agent_id"),
                     "confidence": argument.get("confidence"),
-                    "target_args": ";".join(argument.get("target_args", argument.get("targets", []))),
+                    "target_args": ";".join(argument.get("target_args", [])),
                     "cited_comment_ids": ";".join(argument.get("cited_comment_ids", [])),
                     "claim": argument.get("claim"),
                 }

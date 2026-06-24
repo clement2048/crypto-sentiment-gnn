@@ -66,18 +66,10 @@ class Argument:
     phase: str = ""
     t_index: float = 0.0
 
-    @property
-    def targets(self) -> list[str]:
-        """Compatibility alias for older code/tests; v3 uses target_args."""
-        return self.target_args
-
-    @targets.setter
-    def targets(self, value: list[str]) -> None:
-        self.target_args = value
-
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Argument":
-        camp = data.get("camp")
+        role = str(data.get("role") or "")
+        camp = data.get("camp") or _camp_from_role(role)
         if camp not in ("bull", "bear"):
             raise ValueError(f"Invalid argument camp: {camp}")
         argument_id = str(data.get("argument_id") or "")
@@ -90,11 +82,11 @@ class Argument:
             argument_id=argument_id,
             agent_id=str(data.get("agent_id") or ""),
             camp=camp,
-            role=str(data.get("role") or ""),
+            role=role,
             claim=claim,
             evidence=[Evidence.from_dict(item) for item in data.get("evidence", [])],
             confidence=_clamp01(data.get("confidence", 0.0)),
-            target_args=[str(item) for item in data.get("target_args", data.get("targets", []))],
+            target_args=[str(item) for item in data.get("target_args", [])],
             cited_comment_ids=[str(item) for item in data.get("cited_comment_ids", [])],
             round=int(data.get("round") or 0),
             seq=int(data.get("seq") or 0),
@@ -112,7 +104,6 @@ class Argument:
             "evidence": [item.to_dict() for item in self.evidence],
             "confidence": self.confidence,
             "target_args": self.target_args,
-            "targets": self.target_args,
             "cited_comment_ids": self.cited_comment_ids,
             "round": self.round,
             "seq": self.seq,
@@ -155,6 +146,14 @@ def _clamp01(value: Any) -> float:
     except (TypeError, ValueError):
         numeric = 0.0
     return max(PROBABILITY_MIN, min(PROBABILITY_MAX, numeric))
+
+
+def _camp_from_role(role: str) -> Camp | None:
+    if role == "bull_agent":
+        return "bull"
+    if role == "bear_agent":
+        return "bear"
+    return None
 
 
 def _normalize_evidence_source_type(value: Any) -> EvidenceSource:

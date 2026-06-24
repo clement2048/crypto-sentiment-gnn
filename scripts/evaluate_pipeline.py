@@ -148,12 +148,12 @@ def main() -> None:
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     parser.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
-    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    parser.add_argument("--debate-mode", choices=["siliconflow"], default="siliconflow")
+    parser.add_argument("--judge-mode", choices=["siliconflow"], default="siliconflow")
     parser.add_argument(
         "--embedding-backend",
         choices=["none", "sentencebert", "finbert", "sentencebert_finbert"],
-        default=None,
+        default="sentencebert",
     )
     parser.add_argument("--output-jsonl", type=str, default=None)
     parser.add_argument("--metrics-json", type=str, default=None)

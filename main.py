@@ -50,7 +50,7 @@ def main() -> None:
     _add_input_arg(debate)
     debate.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
     debate.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    debate.add_argument("--mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    debate.add_argument("--mode", choices=["siliconflow"], default="siliconflow")
     debate.add_argument("--output-jsonl", type=str, default=None)
     debate.set_defaults(func=_cmd_debate)
 
@@ -59,7 +59,7 @@ def main() -> None:
     _add_input_arg(graphs)
     graphs.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
     graphs.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    graphs.add_argument("--mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    graphs.add_argument("--mode", choices=["siliconflow"], default="siliconflow")
     graphs.add_argument("--output-jsonl", type=str, default=None)
     graphs.set_defaults(func=_cmd_graphs)
 
@@ -80,8 +80,8 @@ def main() -> None:
     full.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     full.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
     full.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    full.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
-    full.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    full.add_argument("--debate-mode", choices=["siliconflow"], default="siliconflow")
+    full.add_argument("--judge-mode", choices=["siliconflow"], default="siliconflow")
     full.add_argument("--reflection-rounds", type=int, default=0)
     _add_embedding_arg(full)
     full.add_argument("--output-jsonl", type=str, default=None)
@@ -94,8 +94,8 @@ def main() -> None:
     evaluate.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     evaluate.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
     evaluate.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    evaluate.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
-    evaluate.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    evaluate.add_argument("--debate-mode", choices=["siliconflow"], default="siliconflow")
+    evaluate.add_argument("--judge-mode", choices=["siliconflow"], default="siliconflow")
     _add_embedding_arg(evaluate)
     evaluate.add_argument("--output-jsonl", type=str, default=None)
     evaluate.add_argument("--metrics-json", type=str, default=None)
@@ -110,8 +110,8 @@ def main() -> None:
     experiment.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     experiment.add_argument("--epochs", type=int, default=5)
     experiment.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    experiment.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
-    experiment.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    experiment.add_argument("--debate-mode", choices=["siliconflow"], default="siliconflow")
+    experiment.add_argument("--judge-mode", choices=["siliconflow"], default="siliconflow")
     experiment.add_argument("--seed", type=int, default=42)
     _add_embedding_arg(experiment)
     experiment.add_argument("--output-json", type=str, default=None)
@@ -124,8 +124,8 @@ def main() -> None:
     case_study.add_argument("--block-id", default=None)
     case_study.add_argument("--max-blocks", type=int, default=None)
     case_study.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    case_study.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="deepseek")
-    case_study.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    case_study.add_argument("--debate-mode", choices=["siliconflow"], default="siliconflow")
+    case_study.add_argument("--judge-mode", choices=["siliconflow"], default="siliconflow")
     case_study.add_argument("--seed", type=int, default=42)
     case_study.add_argument("--output-json", default=None)
     case_study.add_argument("--output-md", default=None)
@@ -143,8 +143,8 @@ def _add_embedding_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--embedding-backend",
         choices=["none", "sentencebert", "finbert", "sentencebert_finbert"],
-        default=None,
-        help="Optional text embedding backend appended to the 12 structural node features.",
+        default="sentencebert",
+        help="Text embedding backend used as graph node features for Bi-ODE.",
     )
 
 

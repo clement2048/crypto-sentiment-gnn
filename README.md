@@ -36,7 +36,7 @@ main.py         统一命令行入口
 pip install -r requirements-embedding.txt
 ```
 
-默认仍使用 12 维结构特征；可通过 `--embedding-backend sentencebert`、`--embedding-backend finbert` 或 `--embedding-backend sentencebert_finbert` 拼接文本向量。embedding 缓存在 `outputs/embedding_cache/`。
+默认使用较快的 `sentencebert` 文本向量作为节点特征；也可通过 `--embedding-backend finbert` 或 `--embedding-backend sentencebert_finbert` 切换。embedding 缓存在 `outputs/embedding_cache/`。
 
 ## 数据流
 
@@ -74,8 +74,6 @@ python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --r
 可选 provider：
 
 ```text
-deepseek
-bailian
 siliconflow
 ```
 
@@ -84,10 +82,6 @@ siliconflow
 API key 放在项目根目录 `.env` 或当前 shell 环境变量中。`.env` 已被 `.gitignore` 忽略。
 
 ```bash
-DEEPSEEK_API_KEY=
-BAILIAN_API_KEY=
-DASHSCOPE_API_KEY=
-ANTHROPIC_API_KEY=
 SILICONFLOW_API_KEY=
 SILICONFLOW_MODEL=
 ```

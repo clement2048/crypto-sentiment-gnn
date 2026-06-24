@@ -8,7 +8,7 @@ import torch
 from agent import DebateOrchestrator
 from data import build_comment_blocks, load_posts
 from debate_graph import build_hetero_graph, graph_to_tensor
-from debate_graph.graph_batch import NODE_FEATURE_DIM
+from debate_graph.graph_batch import get_node_feature_dim
 from model import GraphSentimentModel
 from model.losses import classification_loss
 from profiles import ProfileStore
@@ -26,14 +26,14 @@ class StageFourModelTest(unittest.TestCase):
     def test_graph_to_tensor_shapes(self):
         graph_tensor = _fixture_graph_tensor()
 
-        self.assertEqual(graph_tensor.x.shape[1], NODE_FEATURE_DIM)
+        self.assertEqual(graph_tensor.x.shape[1], get_node_feature_dim("none"))
         self.assertEqual(graph_tensor.label.shape, (1,))
         for adj in graph_tensor.relation_adjs.values():
             self.assertEqual(adj.shape, (graph_tensor.num_nodes, graph_tensor.num_nodes))
 
     def test_model_forward_probability(self):
         graph_tensor = _fixture_graph_tensor()
-        model = GraphSentimentModel(input_dim=NODE_FEATURE_DIM, hidden_dim=8, ode_steps=2)
+        model = GraphSentimentModel(input_dim=graph_tensor.x.shape[1], hidden_dim=8, ode_steps=2)
 
         prob = model(graph_tensor)
 
@@ -44,7 +44,7 @@ class StageFourModelTest(unittest.TestCase):
 
     def test_model_backward_step(self):
         graph_tensor = _fixture_graph_tensor()
-        model = GraphSentimentModel(input_dim=NODE_FEATURE_DIM, hidden_dim=8, ode_steps=2)
+        model = GraphSentimentModel(input_dim=graph_tensor.x.shape[1], hidden_dim=8, ode_steps=2)
         optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
 
         prob = model(graph_tensor)
@@ -62,6 +62,7 @@ class StageFourModelTest(unittest.TestCase):
             rounds=1,
             epochs=2,
             client=FakeDebateClient(),
+            embedding_backend="none",
         )
 
         self.assertEqual(metrics["graphs"], 1.0)
@@ -77,6 +78,7 @@ class StageFourModelTest(unittest.TestCase):
             train_epochs=1,
             debate_client=FakeDebateClient(),
             judge_client=FakeJudgeClient(),
+            embedding_backend="none",
         )
 
         self.assertEqual(len(records), 1)
@@ -100,6 +102,7 @@ class StageFourModelTest(unittest.TestCase):
             seed=123,
             debate_client=FakeDebateClient(),
             judge_client=FakeJudgeClient(),
+            embedding_backend="none",
         )
 
         self.assertEqual(result["config"]["train_count"], 2)
@@ -116,7 +119,7 @@ def _fixture_graph_tensor():
     profiles = ProfileStore.from_blocks(blocks).get_profiles_for_block(block)
     transcript = DebateOrchestrator(client=FakeDebateClient()).run(block, profiles, rounds=1)
     graph = build_hetero_graph(block, transcript)
-    return graph_to_tensor(graph, label=block.label)
+    return graph_to_tensor(graph, label=block.label, embedding_backend="none")
 
 
 if __name__ == "__main__":

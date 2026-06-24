@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from agent.prompts import JUDGE_SYSTEM_PROMPT
+from agent.prompts import read_agent_spec
 
 
 JUDGE_JSON_INSTRUCTION = """Output pure JSON matching JudgeOutput schema. Do not use markdown."""
 
 
-JUDGE_OUTPUT_SCHEMA_PROMPT = f"""{JUDGE_SYSTEM_PROMPT}
+JUDGE_OUTPUT_SCHEMA_PROMPT = f"""{read_agent_spec('judge.md')}
 
 {JUDGE_JSON_INSTRUCTION}
 

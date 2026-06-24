@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_INPUT = "outputs/split_9_3_3_deepseek.json"
+DEFAULT_INPUT = "outputs/split_9_3_3_siliconflow.json"
 
 
 def main() -> None:
@@ -403,9 +403,9 @@ HTML_TEMPLATE = r"""<!doctype html>
           ${esc(ev.quote)}
         </div>
       `).join("");
-      const targetIds = arg.target_args || arg.targets || [];
+      const targetIds = arg.target_args || [];
       const byId = new Map((rec.arguments || []).map(item => [item.argument_id, item]));
-      const targets = targetIds.map(id => {
+      const targetBlocks = targetIds.map(id => {
         const target = byId.get(id);
         if (!target) {
           return `<div class="target"><small>target_arg ${esc(id)}</small>未在当前样本中找到对应发言</div>`;
@@ -422,8 +422,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         </div>
         <div class="claim">${esc(arg.claim)}</div>
         <details>
-          <summary>证据 ${arg.evidence?.length || 0} 条 · target_args ${(arg.target_args || arg.targets || []).length || 0}</summary>
-          ${targets || `<div class="target">没有回应/反驳的上一条发言</div>`}
+          <summary>证据 ${arg.evidence?.length || 0} 条 · target_args ${(arg.target_args || []).length || 0}</summary>
+          ${targetBlocks || `<div class="target">没有回应/反驳的上一条发言</div>`}
           ${evidence || `<div class="evidence">没有证据条目</div>`}
         </details>
       </article>`;

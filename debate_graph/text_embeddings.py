@@ -1,13 +1,10 @@
-"""Optional text embedding backends for graph node features.
-
-The default pipeline does not require these dependencies. SentenceBERT and
-FinBERT are loaded only when their backend is requested.
-"""
+"""Text embedding backends for graph node features."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -33,6 +30,9 @@ TEXT_EMBEDDING_CACHE_DIR = getattr(
     "TEXT_EMBEDDING_CACHE_DIR",
     Path(PROJECT_ROOT) / "outputs" / "embedding_cache",
 )
+HF_MODEL_CACHE_DIR = getattr(project_config, "HF_MODEL_CACHE_DIR", Path(PROJECT_ROOT) / "outputs" / "hf_cache")
+os.environ.setdefault("HF_HOME", str(HF_MODEL_CACHE_DIR))
+os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(HF_MODEL_CACHE_DIR))
 
 
 NO_TEXT_BACKENDS = {"", "none", "structural"}
@@ -129,15 +129,33 @@ def _encode_finbert(texts: list[str]) -> list[list[float]]:
 
 @lru_cache(maxsize=1)
 def _sentencebert_model(sentence_transformer_cls):
-    return sentence_transformer_cls(SENTENCEBERT_MODEL_NAME)
+    return sentence_transformer_cls(
+        SENTENCEBERT_MODEL_NAME,
+        cache_folder=str(HF_MODEL_CACHE_DIR),
+        local_files_only=_has_hf_cache(SENTENCEBERT_MODEL_NAME),
+    )
 
 
 @lru_cache(maxsize=1)
 def _finbert_model(tokenizer_cls, model_cls):
-    tokenizer = tokenizer_cls.from_pretrained(FINBERT_MODEL_NAME)
-    model = model_cls.from_pretrained(FINBERT_MODEL_NAME)
+    local_only = _has_hf_cache(FINBERT_MODEL_NAME)
+    tokenizer = tokenizer_cls.from_pretrained(
+        FINBERT_MODEL_NAME,
+        cache_dir=str(HF_MODEL_CACHE_DIR),
+        local_files_only=local_only,
+    )
+    model = model_cls.from_pretrained(
+        FINBERT_MODEL_NAME,
+        cache_dir=str(HF_MODEL_CACHE_DIR),
+        local_files_only=local_only,
+    )
     model.eval()
     return tokenizer, model
+
+
+def _has_hf_cache(model_name: str) -> bool:
+    cache_name = "models--" + model_name.replace("/", "--")
+    return (Path(HF_MODEL_CACHE_DIR) / cache_name).exists()
 
 
 def _fit_dim(vector: list[float], dim: int) -> list[float]:

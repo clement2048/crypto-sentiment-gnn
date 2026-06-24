@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from agent.prompts import normalize_role
 from agent.schema import Argument, Camp, DebateTranscript, Evidence
 from data.schema import CommentBlock
 from judge.judge_schema import JudgeOutput, JudgeScoreVector
@@ -24,14 +23,13 @@ class FakeDebateClient:
         available_target_ids: list[str] | None = None,
     ) -> Argument:
         root = block.root_comment
-        targets = list(available_target_ids or [])[-2:]
-        normalized_role = normalize_role(role)
+        target_ids = list(available_target_ids or [])[-2:]
         direction = "bullish" if camp == "bull" else "bearish"
         return Argument(
             argument_id=f"{block.block_id}:r{round_index}:s{seq}:{camp}",
-            agent_id=f"{camp}_{normalized_role}",
+            agent_id=f"{camp}_{role}",
             camp=camp,
-            role=normalized_role,
+            role=role,
             claim=f"[{phase}] {direction} test argument for {block.product or 'asset'}: {root.text[:48]}",
             evidence=[
                 Evidence(
@@ -43,7 +41,7 @@ class FakeDebateClient:
                 )
             ],
             confidence=0.62 if camp == "bear" else 0.58,
-            target_args=targets,
+            target_args=target_ids,
             cited_comment_ids=[],
             round=round_index,
             seq=seq,

@@ -51,7 +51,7 @@ MacBook 当前路径：
 - 评估：已有 accuracy、precision、recall、F1、混淆统计；ECE、Brier、Market Match Rate、活动强度分层等仍未完整实现。
 - 市场行为验证：已有价格方向验证；交易量/活动强度验证尚未系统化。
 - 用户画像：七维字段已基本存在；活跃度、影响力、文本情绪稳定性仍是轻量规则特征，未必等同论文级定义。
-- 节点特征：默认仍使用 12 维结构/文本代理特征；已加入可选 `sentencebert`、`finbert`、`sentencebert_finbert` 后端用于测试文本 embedding，入口参数为 `--embedding-backend`。
+- 节点特征：已删除 12 维手工结构特征，默认使用 `sentencebert` 文本 embedding；可选 `finbert`、`sentencebert_finbert`，入口参数为 `--embedding-backend`。
 
 ## 近期 TODO
 

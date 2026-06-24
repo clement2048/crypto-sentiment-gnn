@@ -1,4 +1,4 @@
-"""Run and render a readable DeepSeek debate case study."""
+"""Run and render a readable debate case study."""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from config import DEFAULT_DEBATE_ROUNDS
 from data import build_comment_blocks, load_posts
 from data.schema import CommentBlock, PostRecord, RawComment, datetime_to_str
 from debate_graph import HeteroGraph, build_hetero_graph, graph_to_tensor
-from debate_graph.graph_batch import NODE_FEATURE_DIM
 from judge import create_judge_client
 from model import GraphSentimentModel
 from profiles import ProfileStore
@@ -39,7 +38,7 @@ def run_case_study(
     block_id: str | None = None,
     max_blocks: int | None = None,
     rounds: int = DEFAULT_DEBATE_ROUNDS,
-    debate_mode: str = "deepseek",
+    debate_mode: str = "siliconflow",
     judge_mode: str = "siliconflow",
     seed: int = 42,
     debate_client: DebateClient | None = None,
@@ -66,7 +65,7 @@ def run_case_study(
 
     profile_store = ProfileStore.from_blocks(all_blocks)
     orchestrator = DebateOrchestrator(client=debate_client or create_debate_client(debate_mode))
-    model = GraphSentimentModel(input_dim=NODE_FEATURE_DIM)
+    model: GraphSentimentModel | None = None
     judge = judge_client or create_judge_client(judge_mode)
 
     block_records: list[CaseBlockRecord] = []
@@ -74,7 +73,10 @@ def run_case_study(
         profiles = profile_store.get_profiles_for_block(block)
         transcript = orchestrator.run(block, profiles, rounds=rounds)
         graph = build_hetero_graph(block, transcript)
-        model_summary = model.summarize(graph_to_tensor(graph, label=block.label))
+        graph_tensor = graph_to_tensor(graph, label=block.label)
+        if model is None:
+            model = GraphSentimentModel(input_dim=graph_tensor.x.shape[1])
+        model_summary = model.summarize(graph_tensor)
         judge_output = judge.judge(transcript, model_summary, graph)
         block_records.append(
             CaseBlockRecord(
@@ -117,8 +119,8 @@ def main() -> None:
     parser.add_argument("--block-id", default=None)
     parser.add_argument("--max-blocks", type=int, default=None)
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="deepseek")
-    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    parser.add_argument("--debate-mode", choices=["siliconflow"], default="siliconflow")
+    parser.add_argument("--judge-mode", choices=["siliconflow"], default="siliconflow")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-json", default=None)
     parser.add_argument("--output-md", default=None)
@@ -218,7 +220,7 @@ def render_case_markdown(result: dict[str, Any]) -> str:
                 f"#### {argument['seq']}. {argument['camp']} / {argument['role']}",
                 "",
                 f"- confidence: `{argument['confidence']:.3f}`",
-                f"- target_args: `{argument.get('target_args', argument.get('targets', []))}`",
+                f"- target_args: `{argument.get('target_args', [])}`",
                 f"- claim: {argument['claim']}",
                 "- evidence:",
             ])

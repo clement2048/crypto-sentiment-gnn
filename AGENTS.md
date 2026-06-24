@@ -23,6 +23,7 @@ This file provides guidance to Codex when working in this repository.
 - 不要绕过 `profiles.ProfileStore.get_profiles_for_block` 读取历史画像。
 - 不要把 `p1`、未来价格、真实标签传给 LLM Agent / Judge。
 - LLM Agent / LLM Judge 不可微，不能把 Judge 输出直接塞进 `loss.backward()`。
+- 允许直接修改 `config.py`。本项目本地实验实际读取 `config.py`，涉及运行配置、默认模型、默认 embedding、缓存目录、实验超参数时，必须同步修改 `config.py`；不要只改 `config.example.py`。
 
 ## 当前项目
 
@@ -87,11 +88,9 @@ python main.py evaluate --rounds 4 --debate-mode siliconflow --judge-mode silico
 python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 4 --epochs 5 --debate-mode siliconflow --judge-mode siliconflow
 ```
 
-可选 provider：
+可用 provider：
 
 ```text
-deepseek
-bailian
 siliconflow
 ```
 
@@ -126,6 +125,6 @@ siliconflow
 ## 配置
 
 - 默认数据：`dataset/final.jsonl`
-- API key：项目根目录 `.env` 或环境变量
+- API key：项目根目录 `.env` 或环境变量。
 - LLM cache：`outputs/llm_cache/`
 - 配置常量优先放在 `config.py`，不要在调用方硬编码超参数。

@@ -29,7 +29,7 @@ Per-sample data flow:
 5. Output to downstream
    The final `DebateTranscript` is consumed by:
    - `build_debate_graph(...)`, which turns `target_args` into `interact` edges;
-   - Judge clients, which read claims/evidence/targets as raw debate logic;
+   - Judge clients, which read claims, evidence, and `target_args` as debate logic;
    - optional reflection loops, which append more arguments without deleting
      earlier ones.
 """
@@ -37,7 +37,6 @@ Per-sample data flow:
 from __future__ import annotations
 
 from agent.llm_client import DebateClient
-from agent.prompts import roles_for_camp
 from agent.schema import Argument, Camp, DebateTranscript
 from config import DEFAULT_DEBATE_ROUNDS, REFLECTION_MAX_ROUNDS
 from data.schema import CommentBlock
@@ -45,27 +44,17 @@ from agent.reflection import ReflectionSignal, should_continue_reflection
 from profiles.user_profile import UserProfile
 
 
-CAMPS: tuple[Camp, ...] = ("bull", "bear")
-
-
 class DebateOrchestrator:
     """Convert one sample and its profiles into a structured debate transcript."""
 
-    def __init__(
-        self,
-        client: DebateClient,
-        roles: tuple[str, ...] | None = None,
-    ):
+    def __init__(self, client: DebateClient):
         self.client = client
-        self.roles = roles
 
     def run(
         self,
         block: CommentBlock,
         profiles: dict[str, UserProfile],
         rounds: int = DEFAULT_DEBATE_ROUNDS,
-        reflection_signal: ReflectionSignal | None = None,
-        reflection_rounds: int = 0,
     ) -> DebateTranscript:
         """Run the initial bull/bear debate.
 
@@ -85,28 +74,28 @@ class DebateOrchestrator:
             # Bull reads all prior arguments but is only allowed to target the
             # latest bear-side argument. The allowed target list is passed to
             # the LLM prompt and enforced again after parsing by provider code.
-            bull_targets = _latest_argument_ids(arguments, camp="bear", limit=1)
+            bull_target_ids = _latest_argument_ids(arguments, camp="bear", limit=1)
             bull = self._generate(
                 block=block,
                 profiles=profiles,
                 camp="bull",
-                role=self._role_for_camp("bull"),
+                role="bull_agent",
                 round_index=round_index,
                 seq=1,
                 prior_arguments=arguments,
                 phase="initial_argument" if round_index == 1 else "rebuttal",
-                available_target_ids=bull_targets,
+                available_target_ids=bull_target_ids,
             )
             arguments.append(bull)
 
             # Bear sees the newly generated bull argument in prior_arguments and
-            # targets it directly. This gives every normal round a simple
+            # uses its argument_id as target_args. This gives every normal round a simple
             # bull -> bear local interaction that can become an `interact` edge.
             bear = self._generate(
                 block=block,
                 profiles=profiles,
                 camp="bear",
-                role=self._role_for_camp("bear"),
+                role="bear_agent",
                 round_index=round_index,
                 seq=2,
                 prior_arguments=arguments,
@@ -116,21 +105,10 @@ class DebateOrchestrator:
             arguments.append(bear)
 
             # Early stop is intentionally conservative. It only stops when both
-            # latest arguments have no targets, meaning the LLM produced no
+            # latest arguments have no target_args, meaning the LLM produced no
             # actionable interaction for this round.
             if _debate_converged(arguments):
                 break
-
-        # This optional path is mostly kept for callers that want to start a
-        # debate with a known reflection signal. The main full pipeline usually
-        # runs initial debate first, asks Judge, then calls add_reflection_rounds.
-        if reflection_signal is not None and should_continue_reflection(reflection_signal):
-            extra_rounds = min(max(reflection_rounds, 0), REFLECTION_MAX_ROUNDS)
-            for offset in range(extra_rounds):
-                round_index = len(arguments) // 2 + offset + 1
-                arguments.extend(
-                    self._reflection_pair(block, profiles, arguments, round_index, reflection_signal)
-                )
 
         return DebateTranscript(
             block_id=block.block_id,
@@ -170,11 +148,6 @@ class DebateOrchestrator:
             rounds=transcript.rounds + extra_rounds,
             arguments=arguments,
         )
-
-    def _role_for_camp(self, camp: Camp) -> str:
-        if self.roles:
-            return self.roles[0]
-        return roles_for_camp(camp)[0]
 
     def _generate(
         self,
@@ -227,17 +200,17 @@ class DebateOrchestrator:
 
         # Bull supplement usually repairs or expands the bull side while looking
         # at the latest bear-side pressure points.
-        bull_targets = _latest_argument_ids(arguments, camp="bear", limit=2)
+        bull_target_ids = _latest_argument_ids(arguments, camp="bear", limit=2)
         bull = self._generate(
             block=block,
             profiles=profiles,
             camp="bull",
-            role=self._role_for_camp("bull"),
+            role="bull_agent",
             round_index=round_index,
             seq=1,
             prior_arguments=arguments,
             phase=phase,
-            available_target_ids=bull_targets,
+            available_target_ids=bull_target_ids,
         )
 
         # Bear supplement then responds to the new bull supplement and optionally
@@ -247,7 +220,7 @@ class DebateOrchestrator:
             block=block,
             profiles=profiles,
             camp="bear",
-            role=self._role_for_camp("bear"),
+            role="bear_agent",
             round_index=round_index,
             seq=2,
             prior_arguments=[*arguments, bull],

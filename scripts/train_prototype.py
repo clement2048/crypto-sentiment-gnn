@@ -112,14 +112,14 @@ def main() -> None:
     parser.add_argument("--input", default=DEFAULT_INPUT)
     parser.add_argument("--limit-blocks", type=int, default=TRAIN_PROTOTYPE_LIMIT_BLOCKS)
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    parser.add_argument("--mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    parser.add_argument("--mode", choices=["siliconflow"], default="siliconflow")
     parser.add_argument("--epochs", type=int, default=TRAIN_PROTOTYPE_EPOCHS)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
     parser.add_argument("--checkpoint-path", default=None)
     parser.add_argument(
         "--embedding-backend",
         choices=["none", "sentencebert", "finbert", "sentencebert_finbert"],
-        default=None,
+        default="sentencebert",
     )
     args = parser.parse_args()
 

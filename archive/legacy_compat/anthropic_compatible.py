@@ -1,14 +1,7 @@
 """Anthropic-compatible LLM clients (debate + judge).
+为走 Anthropic Messages 兼容协议的 provider 提供共享 HTTP 层。每个 provider 只需要写一层 ~10 行的"薄配置"。
 
-合并自原 agent/deepseek_client.py 与 judge/deepseek_judge_client.py,为
-DeepSeek 等走 Anthropic Messages 兼容协议的 provider 提供
-共享 HTTP 层。每个 provider 只需要写一层 ~10 行的"薄配置"。
-
-API key 加载优先级(每一项依次尝试):
-1. 调用方传入的 ``api_key`` 参数
-2. ``api_key_env``:若值以 ``sk-`` 开头则视为真实 key,否则视为 env 变量名
-3. ``fallback_api_key_env``:同上
-4. 项目根目录的 ``.env`` 文件
+API key 由 config.py 从项目根目录 .env 或系统环境变量读取。
 
 注意:不引入 ``anthropic`` Python SDK,沿用项目惯例手写 ``urllib``。
 """
@@ -19,7 +12,6 @@ import copy
 import hashlib
 import http.client
 import json
-import os
 from pathlib import Path
 import socket
 import ssl
@@ -34,17 +26,15 @@ from agent.schema import Argument, Camp
 from config import (
     DEEPSEEK_ANTHROPIC_BASE_URL,
     DEEPSEEK_ANTHROPIC_VERSION,
-    DEEPSEEK_API_KEY_ENV,
+    DEEPSEEK_API_KEY,
     DEEPSEEK_CACHE_DIR,
     DEEPSEEK_CACHE_ENABLED,
-    DEEPSEEK_FALLBACK_API_KEY_ENV,
     DEEPSEEK_HTTP_RETRIES,
     DEEPSEEK_MAX_TOKENS,
     DEEPSEEK_MODEL,
     DEEPSEEK_TEMPERATURE,
     DEEPSEEK_THINKING_TYPE,
     DEEPSEEK_TIMEOUT_SECONDS,
-    PROJECT_ROOT,
 )
 from data.schema import CommentBlock, datetime_to_str
 from profiles.user_profile import UserProfile
@@ -74,7 +64,7 @@ Transport = Callable[[dict[str, Any]], dict[str, Any]]
 class AnthropicCompatibleDebateClient:
     """所有 Anthropic 兼容 provider 的共享 HTTP 层。
 
-    子类(具体 provider)只需要传 ``base_url`` / ``model`` / ``api_key_env`` /
+    子类(具体 provider)只需要传 ``base_url`` / ``model`` / ``configured_api_key`` /
     ``cache_dir`` 等常量,所有 HTTP / 重试 / 缓存 / 解析逻辑都从这里继承。
     """
 
@@ -92,11 +82,11 @@ class AnthropicCompatibleDebateClient:
         http_retries: int,
         cache_enabled: bool,
         cache_dir: str | Path,
-        api_key_env: str,
-        fallback_api_key_env: str | None,
+        configured_api_key: str,
+        api_key_label: str,
         transport: Transport | None,
     ):
-        self.api_key = api_key or _load_api_key(api_key_env, fallback_api_key_env)
+        self.api_key = api_key or configured_api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.max_tokens = max_tokens
@@ -108,8 +98,7 @@ class AnthropicCompatibleDebateClient:
         self.http_retries = http_retries
         self.cache_enabled = cache_enabled
         self.cache_dir = Path(cache_dir)
-        self.api_key_env = api_key_env
-        self.fallback_api_key_env = fallback_api_key_env
+        self.api_key_label = api_key_label
         self.transport = transport
 
     def generate_argument(
@@ -201,7 +190,7 @@ class AnthropicCompatibleDebateClient:
             "model": self.model,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
-            "system": get_agent_system_prompt(camp, role),
+            "system": get_agent_system_prompt(role),
             "messages": [
                 {
                     "role": "user",
@@ -266,9 +255,7 @@ class AnthropicCompatibleDebateClient:
         if not self.api_key:
             raise ValueError(
                 f"Missing Anthropic-compatible API key. "
-                f"Set {self.api_key_env}"
-                + (f" or {self.fallback_api_key_env}" if self.fallback_api_key_env else "")
-                + " in your environment or .env file."
+                f"Set {self.api_key_label} in your .env file."
             )
 
         request = urllib.request.Request(
@@ -444,8 +431,8 @@ class DeepSeekAnthropicDebateClient(AnthropicCompatibleDebateClient):
             http_retries=DEEPSEEK_HTTP_RETRIES,
             cache_enabled=DEEPSEEK_CACHE_ENABLED,
             cache_dir=DEEPSEEK_CACHE_DIR,
-            api_key_env=DEEPSEEK_API_KEY_ENV,
-            fallback_api_key_env=DEEPSEEK_FALLBACK_API_KEY_ENV,
+            configured_api_key=DEEPSEEK_API_KEY,
+            api_key_label="DEEPSEEK_API_KEY",
             transport=transport,
             **overrides,
         )
@@ -487,7 +474,6 @@ def _build_user_prompt(
         "required_metadata": {
             "argument_id": expected_argument_id,
             "agent_id": expected_agent_id,
-            "camp": camp,
             "role": role,
             "round": round_index,
             "seq": seq,
@@ -520,7 +506,6 @@ def _build_user_prompt(
             {
                 "argument_id": item.argument_id,
                 "agent_id": item.agent_id,
-                "camp": item.camp,
                 "role": item.role,
                 "phase": item.phase,
                 "claim": item.claim,
@@ -534,43 +519,20 @@ def _build_user_prompt(
 
 
 def _phase_instructions(phase: str) -> str:
-    instructions = {
-        "initial_argument": (
-            "Generate an independent opening argument. Do not target previous arguments."
-        ),
-        "rebuttal": (
+    if phase == "initial_argument":
+        return "Generate an independent opening argument. Do not target previous arguments."
+    if phase == "rebuttal":
+        return (
             "Generate a concise targeted rebuttal. Use only target_args from available_target_args, "
             "answer the opponent's latest claim directly, and ground the response in supplied text "
             "or time-safe profile signals."
-        ),
-        "intra_reflection": (
-            "Act as the camp's reflection agent. Read same-camp opening arguments, point out "
-            "logical gaps, evidence weakness, and useful shared support. Target same-camp argument ids."
-        ),
-        "intra_response": (
-            "Act as a core camp agent responding to the reflection agent. Revise or strengthen "
-            "your camp's position using the reflection critique. You must target the reflection "
-            "argument id if it is available."
-        ),
-        "cross_response": (
-            "Read opponent arguments and generate a targeted response/rebuttal. "
-            "Choose target_args only from available_target_args."
-        ),
-        "counter_reflection": (
-            "Act as the camp's reflection agent after opponent attacks. Identify the most damaging "
-            "opponent attack, what your camp must repair, and which counterpoint is strongest."
-        ),
-        "counter_rebuttal": (
-            "Answer the opponent's latest cross-response arguments after reading your camp's "
-            "counter_reflection. You must target the counter_reflection argument id if it is available, "
-            "and may also target opponent attack ids."
-        ),
-        "reflection_summary": (
-            "Summarize this round's debate quality for your camp. Mention strongest support, "
-            "weakest evidence, and unresolved uncertainty."
-        ),
-    }
-    return instructions.get(phase, "Follow the requested debate phase and use only provided data.")
+        )
+    if phase.startswith("reflection_supplement"):
+        return (
+            "Generate a concise supplement that repairs weak dimensions identified by Judge. "
+            "Use only target_args from available_target_args and do not use future labels or prices."
+        )
+    return "Follow the requested debate phase and use only provided data."
 
 
 def _comment_for_prompt(comment) -> dict[str, Any]:
@@ -697,68 +659,6 @@ def _normalize_argument_metadata(
         allowed = set(available_target_ids)
         argument.target_args = [target_id for target_id in argument.target_args if target_id in allowed]
     return argument
-
-
-def _load_api_key(primary_env: str, fallback_env: str | None) -> str | None:
-    """按优先级解析 API key。
-
-    每一步依次:
-    1. 如果 env 名本身以 ``sk-`` 开头,直接视为真实 key 返回(兼容把 key
-       直接写进 config 的历史写法)。
-    2. 否则用 ``os.getenv(env_name)`` 读真实 env。
-    3. fallback env 重复 1-2。
-    4. 最后从项目根目录 ``.env`` 文件读。
-    """
-    for name in [primary_env, fallback_env]:
-        if not name:
-            continue
-        if _looks_like_api_key(name):
-            return name
-    for name in [primary_env, fallback_env]:
-        if not name:
-            continue
-        env_key = os.getenv(name)
-        if env_key:
-            return env_key
-    return _load_api_key_from_dotenv(PROJECT_ROOT / ".env", [primary_env, fallback_env])
-
-
-def _looks_like_api_key(value: str | None) -> bool:
-    """兼容把真实 key 直接写到 config 的情况;更推荐用 .env 或环境变量。"""
-    return bool(value and value.startswith("sk-"))
-
-
-def _load_api_key_from_dotenv(path: Path, env_names: list[str | None]) -> str | None:
-    """从项目根目录 .env 读取 API key,避免把真实密钥写进 config.py。"""
-    if not path.exists():
-        return None
-    return _load_api_key_from_dotenv_text(path.read_text(encoding="utf-8"), env_names)
-
-
-def _load_api_key_from_dotenv_text(
-    text: str, env_names: list[str | None] | None = None
-) -> str | None:
-    """解析 .env 文本;拆出来方便单元测试不接触真实密钥文件。
-
-    ``env_names=None`` 表示不限制 key 名,返回第一个非空 ``KEY=VALUE`` 对的值
-    (兼容 ``test_deepseek_client_can_read_project_dotenv_key`` 的旧调用方式);
-    传入具体列表则只匹配列表里的名字,防止误读无关变量。
-    """
-    supported: set[str] | None = None
-    if env_names is not None:
-        supported = {name for name in env_names if name}
-        if not supported:
-            return None
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, value = line.split("=", 1)
-        name = name.strip()
-        if supported is not None and name not in supported:
-            continue
-        return value.strip().strip('"').strip("'")
-    return None
 
 
 def _judge_input(

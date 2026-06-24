@@ -30,6 +30,7 @@ from agent import DebateOrchestrator, DebateTranscript, create_debate_client
 from agent.llm_client import DebateClient
 from config import DEFAULT_DEBATE_ROUNDS, LEARNING_RATE, PRINT_SAMPLES, TRAIN_CHECKPOINT_DIR
 from data import build_comment_blocks, load_posts
+from debate_graph.text_embeddings import normalize_embedding_backend
 from data.schema import CommentBlock
 from debate_graph import HeteroGraph, build_hetero_graph, graph_to_tensor
 from debate_graph.graph_batch import GraphTensor
@@ -135,7 +136,7 @@ def run_split_experiment(
             "learning_rate": learning_rate,
             "debate_mode": debate_mode,
             "judge_mode": judge_mode,
-            "embedding_backend": embedding_backend or "none",
+            "embedding_backend": normalize_embedding_backend(embedding_backend),
             "node_feature_dim": int(contexts[0].graph_tensor.x.shape[1]),
             "seed": seed,
             "filter_issues": len(issues),
@@ -179,13 +180,13 @@ def main() -> None:
     parser.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    parser.add_argument("--debate-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
-    parser.add_argument("--judge-mode", choices=["deepseek", "bailian", "siliconflow"], default="siliconflow")
+    parser.add_argument("--debate-mode", choices=["siliconflow"], default="siliconflow")
+    parser.add_argument("--judge-mode", choices=["siliconflow"], default="siliconflow")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--embedding-backend",
         choices=["none", "sentencebert", "finbert", "sentencebert_finbert"],
-        default=None,
+        default="sentencebert",
     )
     parser.add_argument("--output-json", type=str, default=None)
     args = parser.parse_args()
@@ -304,10 +305,10 @@ def _print_metrics(split_name: str, metrics: dict[str, Any]) -> None:
         f"{split_name.upper()} metrics: "
         f"n={metrics['total']} "
         f"accuracy={metrics['accuracy']:.4f} "
-            f"macro_f1={metrics['macro_f1']:.4f} "
-            f"bull_f1={metrics['bullish']['f1']:.4f} "
-            f"bear_f1={metrics['bearish']['f1']:.4f}"
-        )
+        f"macro_f1={metrics['macro_f1']:.4f} "
+        f"bull_f1={metrics['bullish']['f1']:.4f} "
+        f"bear_f1={metrics['bearish']['f1']:.4f}"
+    )
     print(f"{split_name.upper()} confusion: {metrics['confusion_matrix']}")
 
 
