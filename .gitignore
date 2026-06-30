@@ -55,3 +55,6 @@ htmlcov/
 # Experiment outputs and model caches
 outputs/
 output/
+
+# 归档目录（ODE 旧方案、legacy 兼容代码、archived tests），不入主流程，不同步上传
+archive/
