@@ -9,22 +9,18 @@ from pathlib import Path
 from config import (
     DEFAULT_DEBATE_ROUNDS,
     DEFAULT_LIMIT_BLOCKS,
-    FULL_PIPELINE_TRAIN_EPOCHS,
-    LEARNING_RATE,
     PRINT_SAMPLES,
-    TRAIN_PROTOTYPE_EPOCHS,
-    TRAIN_PROTOTYPE_LIMIT_BLOCKS,
 )
 from data import build_comment_blocks, load_posts, temporal_split_blocks
 from profiles import ProfileStore
 from scripts.build_graphs import build_graph_records
-from scripts.evaluate_pipeline import evaluate_pipeline
 from scripts.run_case_study import render_case_markdown, run_case_study
 from scripts.run_debate import DEFAULT_INPUT, run_debate_pipeline
-from scripts.run_full_pipeline import run_full_pipeline
-from scripts.run_split_experiment import run_split_experiment
-from scripts.train_prototype import train_prototype
 
+
+# 第一阶段只保留数据检查 + debate + graphs + case-study 这几条入口。
+# 第二阶段启动时再把 judge / evaluation 之类的子命令接回 main.py。
+# 已暂停的 train / full / evaluate / split-experiment 等旧链路全部移到 archive/。
 
 def main() -> None:
     """解析命令行参数，并分发到对应阶段。"""
@@ -32,7 +28,7 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(
-        description="Crypto sentiment analysis v2 prototype",
+        description="Crypto sentiment analysis active commands (blocks / debate / graphs / case-study).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -45,7 +41,7 @@ def main() -> None:
     blocks.add_argument("--output-jsonl", type=str, default=None)
     blocks.set_defaults(func=_cmd_blocks)
 
-    # debate：只生成辩论，不调用模型和法官。用于检查 Agent 输出结构。
+    # debate：只生成辩论，不调用模型和法官。第二阶段启用。
     debate = subparsers.add_parser("debate", help="Run online multi-agent debate.")
     _add_input_arg(debate)
     debate.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
@@ -54,7 +50,7 @@ def main() -> None:
     debate.add_argument("--output-jsonl", type=str, default=None)
     debate.set_defaults(func=_cmd_debate)
 
-    # graphs：把评论树和辩论论点融合成图。用于检查边类型和节点数量。
+    # graphs：把评论树和辩论论点融合成图。第二阶段启用。
     graphs = subparsers.add_parser("graphs", help="Build heterogeneous debate/comment graphs.")
     _add_input_arg(graphs)
     graphs.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
@@ -62,60 +58,6 @@ def main() -> None:
     graphs.add_argument("--mode", choices=["siliconflow"], default="siliconflow")
     graphs.add_argument("--output-jsonl", type=str, default=None)
     graphs.set_defaults(func=_cmd_graphs)
-
-    # train-prototype：最小训练 smoke，证明当前模型能前向和反向传播。
-    train = subparsers.add_parser("train-prototype", help="Smoke-train the minimal graph model.")
-    _add_input_arg(train)
-    train.add_argument("--limit-blocks", type=int, default=TRAIN_PROTOTYPE_LIMIT_BLOCKS)
-    train.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    train.add_argument("--epochs", type=int, default=TRAIN_PROTOTYPE_EPOCHS)
-    train.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    _add_embedding_arg(train)
-    train.set_defaults(func=_cmd_train_prototype)
-
-    # full：当前最完整的原型链路，最后由 model-aware judge 输出 JudgeOutput。
-    full = subparsers.add_parser("full", help="Run debate -> graph -> model summary -> judge.")
-    _add_input_arg(full)
-    full.add_argument("--limit-blocks", type=int, default=DEFAULT_LIMIT_BLOCKS)
-    full.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    full.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
-    full.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    full.add_argument("--debate-mode", choices=["siliconflow"], default="siliconflow")
-    full.add_argument("--judge-mode", choices=["siliconflow"], default="siliconflow")
-    full.add_argument("--reflection-rounds", type=int, default=0)
-    _add_embedding_arg(full)
-    full.add_argument("--output-jsonl", type=str, default=None)
-    full.set_defaults(func=_cmd_full)
-
-    # evaluate：默认对全部 CommentBlock 跑完整链路，并计算最终验证指标。
-    evaluate = subparsers.add_parser("evaluate", help="Evaluate judge predictions against CommentBlock labels.")
-    _add_input_arg(evaluate)
-    evaluate.add_argument("--limit-blocks", type=int, default=None, help="Limit samples; omit for all blocks.")
-    evaluate.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    evaluate.add_argument("--train-epochs", type=int, default=FULL_PIPELINE_TRAIN_EPOCHS)
-    evaluate.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    evaluate.add_argument("--debate-mode", choices=["siliconflow"], default="siliconflow")
-    evaluate.add_argument("--judge-mode", choices=["siliconflow"], default="siliconflow")
-    _add_embedding_arg(evaluate)
-    evaluate.add_argument("--output-jsonl", type=str, default=None)
-    evaluate.add_argument("--metrics-json", type=str, default=None)
-    evaluate.set_defaults(func=_cmd_evaluate)
-
-    # split-experiment：按时间顺序做固定数量 train/val/test 小实验，例如 9:3:3。
-    experiment = subparsers.add_parser("split-experiment", help="Run chronological train/val/test experiment.")
-    _add_input_arg(experiment)
-    experiment.add_argument("--train-count", type=int, default=9)
-    experiment.add_argument("--val-count", type=int, default=3)
-    experiment.add_argument("--test-count", type=int, default=3)
-    experiment.add_argument("--rounds", type=int, default=DEFAULT_DEBATE_ROUNDS)
-    experiment.add_argument("--epochs", type=int, default=5)
-    experiment.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
-    experiment.add_argument("--debate-mode", choices=["siliconflow"], default="siliconflow")
-    experiment.add_argument("--judge-mode", choices=["siliconflow"], default="siliconflow")
-    experiment.add_argument("--seed", type=int, default=42)
-    _add_embedding_arg(experiment)
-    experiment.add_argument("--output-json", type=str, default=None)
-    experiment.set_defaults(func=_cmd_split_experiment)
 
     # case-study：选一个评论较多的帖子，生成可阅读的辩论过程报告。
     case_study = subparsers.add_parser("case-study", help="Run and render a readable debate case study.")
@@ -137,15 +79,6 @@ def main() -> None:
 
 def _add_input_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--input", default=DEFAULT_INPUT, help="JSONL file, directory, or glob pattern.")
-
-
-def _add_embedding_arg(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--embedding-backend",
-        choices=["none", "sentencebert", "finbert", "sentencebert_finbert"],
-        default="sentencebert",
-        help="Text embedding backend used as graph node features for Bi-ODE.",
-    )
 
 
 def _cmd_blocks(args: argparse.Namespace) -> None:
@@ -207,167 +140,6 @@ def _cmd_graphs(args: argparse.Namespace) -> None:
         _write_jsonl(args.output_jsonl, records)
 
 
-def _cmd_train_prototype(args: argparse.Namespace) -> None:
-    """训练几轮原型模型，只用于验证链路可训练。"""
-    metrics = train_prototype(
-        input_path=args.input,
-        limit_blocks=args.limit_blocks,
-        rounds=args.rounds,
-        epochs=args.epochs,
-        learning_rate=args.learning_rate,
-        embedding_backend=args.embedding_backend,
-    )
-    print(
-        "Prototype training complete: "
-        f"graphs={metrics['graphs']:.0f} "
-        f"final_loss={metrics['final_loss']:.4f} "
-        f"mean_probability={metrics['mean_probability']:.4f}"
-    )
-
-
-def _cmd_full(args: argparse.Namespace) -> None:
-    """运行完整原型流程：辩论 -> 图 -> 模型摘要 -> 法官。"""
-    records = run_full_pipeline(
-        input_path=args.input,
-        limit_blocks=args.limit_blocks,
-        rounds=args.rounds,
-        train_epochs=args.train_epochs,
-        learning_rate=args.learning_rate,
-        debate_mode=args.debate_mode,
-        judge_mode=args.judge_mode,
-        reflection_rounds=args.reflection_rounds,
-        embedding_backend=args.embedding_backend,
-    )
-    print(f"Full pipeline records: {len(records)}")
-    for record in records[: min(len(records), PRINT_SAMPLES)]:
-        block = record["block"]
-        model_summary = record["model_summary"]
-        judge = record["judge"]
-        assert isinstance(block, dict)
-        assert isinstance(model_summary, dict)
-        assert isinstance(judge, dict)
-        print(
-            f"- {block['block_id']} | model_prob={model_summary['bullish_probability']:.3f} "
-            f"| verdict={judge['verdict']} | confidence={judge['confidence']:.3f}"
-        )
-    if args.output_jsonl:
-        _write_jsonl(args.output_jsonl, records)
-
-
-def _cmd_evaluate(args: argparse.Namespace) -> None:
-    """运行完整 pipeline，并计算 accuracy/precision/recall/F1 等验证指标。"""
-    records, metrics = evaluate_pipeline(
-        input_path=args.input,
-        limit_blocks=args.limit_blocks,
-        rounds=args.rounds,
-        train_epochs=args.train_epochs,
-        learning_rate=args.learning_rate,
-        debate_mode=args.debate_mode,
-        judge_mode=args.judge_mode,
-        embedding_backend=args.embedding_backend,
-    )
-    print(f"Evaluated samples: {metrics.total}")
-    print(f"Accuracy: {metrics.accuracy:.4f}")
-    print(
-        "Macro: "
-        f"precision={metrics.macro_precision:.4f} "
-        f"recall={metrics.macro_recall:.4f} "
-        f"f1={metrics.macro_f1:.4f}"
-    )
-    print(
-        "Bullish: "
-        f"precision={metrics.bullish.precision:.4f} "
-        f"recall={metrics.bullish.recall:.4f} "
-        f"f1={metrics.bullish.f1:.4f} "
-        f"support={metrics.bullish.support}"
-    )
-    print(
-        "Bearish: "
-        f"precision={metrics.bearish.precision:.4f} "
-        f"recall={metrics.bearish.recall:.4f} "
-        f"f1={metrics.bearish.f1:.4f} "
-        f"support={metrics.bearish.support}"
-    )
-    print(f"Confusion matrix: {metrics.confusion_matrix}")
-    for record in records[: min(len(records), PRINT_SAMPLES)]:
-        block = record["block"]
-        judge = record["judge"]
-        assert isinstance(block, dict)
-        assert isinstance(judge, dict)
-        print(
-            f"- {block['block_id']} | true={block['label']} "
-            f"| pred={judge['verdict']} | confidence={judge['confidence']:.3f}"
-        )
-    if args.output_jsonl:
-        _write_jsonl(args.output_jsonl, records)
-    if args.metrics_json:
-        output_path = Path(args.metrics_json)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(metrics.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"Wrote metrics JSON: {output_path}")
-
-
-def _cmd_split_experiment(args: argparse.Namespace) -> None:
-    """按时间顺序运行固定数量 train/val/test 实验。"""
-    result = run_split_experiment(
-        input_path=args.input,
-        train_count=args.train_count,
-        val_count=args.val_count,
-        test_count=args.test_count,
-        rounds=args.rounds,
-        epochs=args.epochs,
-        learning_rate=args.learning_rate,
-        debate_mode=args.debate_mode,
-        judge_mode=args.judge_mode,
-        seed=args.seed,
-        embedding_backend=args.embedding_backend,
-    )
-    config = result["config"]
-    print(
-        "Split experiment complete: "
-        f"train={config['train_count']} val={config['val_count']} test={config['test_count']} "
-        f"rounds={config['rounds']} epochs={config['epochs']} "
-        f"debate_mode={config['debate_mode']} judge_mode={config['judge_mode']} seed={config['seed']}"
-    )
-    print(
-        "Selected time range: "
-        f"{config['selected_time_range']['start']} -> {config['selected_time_range']['end']}"
-    )
-    losses = result["train_losses"]
-    if losses:
-        print(f"Train loss: first={losses[0]:.4f} last={losses[-1]:.4f}")
-    for split_name in ("train", "val", "test"):
-        metrics = result["metrics"][split_name]
-        if metrics is None:
-            continue
-        print(
-            f"{split_name.upper()} metrics: "
-            f"n={metrics['total']} "
-            f"accuracy={metrics['accuracy']:.4f} "
-            f"macro_f1={metrics['macro_f1']:.4f} "
-            f"bull_f1={metrics['bullish']['f1']:.4f} "
-            f"bear_f1={metrics['bearish']['f1']:.4f}"
-        )
-        print(f"{split_name.upper()} confusion: {metrics['confusion_matrix']}")
-    for split_name in ("train", "val", "test"):
-        records = result["records"][split_name]
-        for record in records[: min(len(records), PRINT_SAMPLES)]:
-            block = record["block"]
-            judge = record["judge"]
-            assert isinstance(block, dict)
-            assert isinstance(judge, dict)
-            print(
-                f"{split_name}: {block['block_id']} | true={block['label']} "
-                f"| pred={judge['verdict']} | confidence={judge['confidence']:.3f}"
-            )
-            print(f"{split_name} judge_report: {judge.get('report', '')}")
-    if args.output_json:
-        output_path = Path(args.output_json)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"Wrote experiment JSON: {output_path}")
-
-
 def _cmd_case_study(args: argparse.Namespace) -> None:
     """运行并导出可读案例报告。"""
     result = run_case_study(
@@ -407,9 +179,9 @@ def _cmd_case_study(args: argparse.Namespace) -> None:
 def _write_jsonl(path: str, records: list[dict[str, object]]) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8") as handle:
+    with output_path.open("w", encoding="utf-8") as fp:
         for record in records:
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+            fp.write(json.dumps(record, ensure_ascii=False) + "\n")
     print(f"Wrote JSONL: {output_path}")
 
 

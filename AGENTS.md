@@ -4,95 +4,81 @@ This file provides guidance to Codex when working in this repository.
 
 ## 回答风格
 
-- 用直接、简洁、事实优先的方式回答。
-- 避免客套话、奉承话、过度积极评价或缺乏依据的主观判断，例如“你这个问题很好”“非常棒的想法”“我完全理解”。
-- 只有在有充分证据时，才使用“显然”“毫无疑问”等强判断表述。
-- 当信息不足、无法确定、没有依据或超出已知范围时，直接说明“我不知道”“目前无法确定”或“需要更多信息才能判断”。
-- 不要编造答案，不要用模糊措辞掩盖不确定性。
-- 回答时区分事实、推断和建议：
-  - 事实：基于可验证信息。
-  - 推断：明确说明是推断。
-  - 建议：说明适用条件和局限。
-- 优先给结论，再给必要理由；不要为了显得友好而增加无实质内容的寒暄。
-
-## 工作规则
-
-- 始终用中文回复。
-- 不确定就明确说“不确定”或“不知道”，不要猜测或编造。
-- 涉及论文定义、实验口径、API 用法或命令参数时，优先查本仓库代码和 Obsidian 文档。
-- 不要绕过 `profiles.ProfileStore.get_profiles_for_block` 读取历史画像。
-- 不要把 `p1`、未来价格、真实标签传给 LLM Agent / Judge。
-- LLM Agent / LLM Judge 不可微，不能把 Judge 输出直接塞进 `loss.backward()`。
-- 允许直接修改 `config.py`。本项目本地实验实际读取 `config.py`，涉及运行配置、默认模型、默认 embedding、缓存目录、实验超参数时，必须同步修改 `config.py`；不要只改 `config.example.py`。
+- 始终用中文回答。
+- 直接、简洁、事实优先。
+- 不确定时明确说明"不确定"或"需要更多信息"，不要猜测。
+- 区分事实、推断和建议。
+- 涉及论文定义、实验口径、API 用法或命令参数时，优先查本仓库代码和 Obsidian 主文档。
 
 ## 当前项目
 
-加密货币舆情二分类原型，当前以论文 V5 和框架设计 V3 为准：
+当前研究题目：
 
 ```text
-JSONL
-  -> CommentBlock
-  -> 时间安全用户画像
-  -> bull_agent / bear_agent 辩论
-  -> debate graph with single interact relation
-  -> Bi-ODE 图模型
-  -> Judge structured report
-  -> 市场价格方向验证
+基于市场用户对话情绪分析的金融产品价格涨跌预测方法
 ```
 
-当前主流程使用一个正方 agent 和一个反方 agent：
+当前实验重点：
 
-- `bull_agent`
-- `bear_agent`
+```text
+dataset/final.jsonl
+  -> CommentBlock
+  -> VADER / Sentence-BERT / Direct LLM baseline（baseline/）
+  -> 第二阶段：bull_agent / bear_agent 正反辩论、辩论图、Judge、价格窗口验证
+```
 
-Judge 可以返回反思报告。反思信息只能指出薄弱维度和补充建议，不能暴露真实标签、`p1` 或未来价格。
+第一阶段先做 VADER、Sentence-BERT、Direct LLM 三类 baseline。第二阶段再构造正反辩论、辩论图和 Judge 流程。
+
+ODE / Bi-ODE 相关模块暂停使用，集中在 `archive/` 下作为旧方案归档参考。不要把 ODE 训练或 ODE summary 写入当前主流程。
 
 ## 外部研究文档
 
 遇到论文语义、实验目标、TODO 优先级不确定时，查 Obsidian：
 
 ```text
-E:\obsidian\knowledge\基于舆情的异常活动检测\市场波动对股民情绪影响
+E:\obsidian\knowledge\基于舆情的异常活动检测\基于市场用户对话情绪分析的金融产品价格涨跌预测方法
 ```
 
 重点文件：
 
 ```text
-市场波动对股民情绪的影响_v5.md
-框架设计\情绪分析系统_v3.md
-研究协作记录.md
+基于市场用户对话情绪分析的金融产品价格涨跌预测方法.md
+论文概述——基于市场用户对话情绪分析的金融产品价格涨跌预测方法.md
+情绪分析系统.md
+todo.md
+PROJECT_STATUS.md
 ```
 
 ## 硬性约束
 
-1. 主监督标签是根评论级 `CommentBlock.label`，不是帖子级投票。
-2. 用户画像、Agent 输入、外部特征必须满足 `t < t0`。
+1. 主监督标签是根评论级 `CommentBlock.label`。
+2. `label = 1` 表示后续价格上涨，`label = -1` 表示后续价格下跌。
 3. `p1`、未来价格、真实标签不能传给 LLM Agent / Judge。
-4. 价格方向 `delta_p = (p1 - p0) / p0` 只能用于标签构造或事后验证，不能作为模型直接输入。
-5. 交易量变化只能作为活动强度信号，不能决定方向。
-6. 评论父子结构保存在评论节点 `parent_id`，不生成 `reply` 边。
-7. 辩论图只保留 `interact` 关系；不生成 `cite` 边。
-8. 引用内容放在生成回复和 `evidence.source` 中。
-9. 论点回应目标使用 `target_args`，时间顺序使用 `t_index`。
+4. `delta_p = (p1 - p0) / p0` 只能用于标签构造或事后验证。
+5. 第一阶段实验不要新增 ODE 训练任务。
+6. 辩论图优先使用统一 `interact` 边；支持或反驳关系由节点立场组合解释。
+7. LLM Agent / LLM Judge 不可微，不能把 Judge 输出直接接入 `loss.backward()`。
 
-## 常用命令
+## Baseline 运行入口
 
-优先使用 `main.py`：
-
-```bash
-python main.py blocks
-python main.py debate --limit-blocks 1 --rounds 4 --mode siliconflow
-python main.py graphs --limit-blocks 1 --rounds 4 --mode siliconflow
-python main.py full --limit-blocks 1 --rounds 4 --debate-mode siliconflow --judge-mode siliconflow
-python main.py evaluate --rounds 4 --debate-mode siliconflow --judge-mode siliconflow
-python main.py split-experiment --train-count 9 --val-count 3 --test-count 3 --rounds 4 --epochs 5 --debate-mode siliconflow --judge-mode siliconflow
-```
-
-可用 provider：
+第一阶段所有 baseline 的运行代码都在 `baseline/`，**不要到 `scripts/` 或其他地方找**：
 
 ```text
-siliconflow
+baseline/
+├── 01_vader_baseline.ipynb            # VADER 词典打分
+├── 02_sentencebert_baseline.ipynb     # Sentence-BERT + LogReg
+├── 03_direct_llm_baseline.ipynb       # SiliconFlow LLM 直调
+├── README.md                          # 三本 ipynb 的入口说明
+└── vaderSentiment/                    # VADER 包
 ```
+
+启动 jupyter：
+
+```bash
+"D:/anaconda/envs/sentiment/python.exe" -m jupyter notebook baseline/
+```
+
+每本顶部都有一行 `SMOKE = True` / `LIMIT_BLOCKS = 10` 这种开关，本机先验证链路，再切全量。输出默认写到 `outputs/<baseline>_smoke/`。
 
 ## Python 环境
 
@@ -102,29 +88,20 @@ siliconflow
 "D:/anaconda/envs/sentiment/python.exe" -m unittest discover -s tests
 ```
 
-系统默认 `python` 可能没有 `torch`，不要默认假设可用。
+Sentence-BERT / FinBERT 嵌入依赖：
 
-## 关键模块
+```bash
+pip install -r requirements-embedding.txt
+```
+
+## 关键模块（仅第一阶段 baseline 用得到的）
 
 | 路径 | 责任 |
 | --- | --- |
+| `baseline/*.ipynb` | 第一阶段三类 baseline 的运行入口 |
 | `data/` | JSONL 加载、过滤、CommentBlock 构建 |
-| `profiles/` | 时间安全用户画像 |
-| `agent/prompts.py` | 当前 `bull_agent` / `bear_agent` 提示词 |
-| `agent/debate_orchestrator.py` | 正反方 agent 发言与反思补充顺序 |
-| `agent/reflection.py` | 反思信号与继续条件 |
-| `debate_graph/comment_graph.py` | 评论节点与 `parent_id` |
-| `debate_graph/debate_graph.py` | 论点 `interact` 图 |
-| `debate_graph/graph_batch.py` | 图张量化 |
-| `model/bdg_ode/` | Bi-ODE 图模型 |
-| `judge/` | Judge schema、prompt、parser、provider |
-| `verification/` | 市场方向与活动强度验证 |
-| `scripts/` | 分阶段脚本 |
-| `tests/` | 单元测试，测试替身在 `tests/fakes.py` |
+| `debate_graph/text_embeddings.py` | Sentence-BERT / FinBERT 文本向量后端 |
+| `config.py` | 配置常量（默认输入路径、LLM 模型、阈值等） |
+| `archive/` | 旧方案与暂停使用的模块（ODE、反思循环、旧训练链路） |
 
-## 配置
-
-- 默认数据：`dataset/final.jsonl`
-- API key：项目根目录 `.env` 或环境变量。
-- LLM cache：`outputs/llm_cache/`
-- 配置常量优先放在 `config.py`，不要在调用方硬编码超参数。
+`agent/`、`judge/`、`verification/`、`debate_graph/comment_graph.py` 等是第二阶段需要的代码，目前属于搁置状态；不要在 baseline notebook 里依赖它们。
