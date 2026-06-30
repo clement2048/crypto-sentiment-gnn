@@ -94,6 +94,12 @@ Sentence-BERT / FinBERT 嵌入依赖：
 pip install -r requirements-embedding.txt
 ```
 
+## 数据 / 统计约定
+
+- 默认数据：`dataset/final.jsonl`
+- 数据统计 / 评估类脚本默认只读 `dataset/final.jsonl`。`archive/final.jsonl` 仅作为历史归档，不纳入主流程统计。
+- 不在用户没要求的前提下写临时的"烟测脚本"（smoke tests）。
+
 ## 关键模块（仅第一阶段 baseline 用得到的）
 
 | 路径 | 责任 |

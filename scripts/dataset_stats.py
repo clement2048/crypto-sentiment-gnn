@@ -1,13 +1,12 @@
 """数据集统计工具：标签分布、按 first_product / 月份 / t_window 切分。
 
-默认只统计 ``dataset/final.jsonl``，符合你"以后只统计 dataset 里面的数据集"
-的口径。
+默认输入是 ``dataset/final.jsonl``。可以通过 ``--input`` 切换输入路径。
 
 用法：
 
-    python scripts/dataset_stats.py                          # 全量
+    python scripts/dataset_stats.py                          # 默认 dataset/final.jsonl
     python scripts/dataset_stats.py --input dataset/final.jsonl
-    python scripts/dataset_stats.py --limit 50               # 烟测
+    python scripts/dataset_stats.py --limit 50
     python scripts/dataset_stats.py --json outputs/dataset_stats.json
 
 也可作为模块导入：

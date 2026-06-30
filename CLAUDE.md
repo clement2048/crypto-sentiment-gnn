@@ -120,6 +120,8 @@ pip install -r requirements-embedding.txt
 ## 配置
 
 - 默认数据：`dataset/final.jsonl`
+- 数据统计 / 评估类脚本默认只读 `dataset/final.jsonl`（如 `scripts/dataset_stats.py`）。`archive/final.jsonl` 仅作为历史归档，不纳入主流程统计。
 - API key：项目根目录 `.env` 或环境变量
 - LLM cache：`outputs/llm_cache/`
 - 配置常量优先放在 `config.py`，不要在调用方硬编码超参数。
+- 不在用户没要求的前提下写临时的"烟测脚本"（smoke tests）；用户明确说要烟测的时候再写。
